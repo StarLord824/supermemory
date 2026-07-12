@@ -4,10 +4,10 @@ Snapshot of what's been built since `git init`, for anyone (including future-us)
 mid-stream. Read `docs/context.md` → `docs/plan.md` → `docs/roadmap.md` →
 `docs/implementation-plan.md` for the why/what/when/how; this file is "where are we right now."
 
-**Current status: blind build phase complete, extended with dual agent runtimes. Zero live
-verification has happened.** Everything below was built on Windows with no access to a running
-`supermemory-server`, Coral, or headless `claude`/`agy`. See "What's NOT done" at the bottom before
-assuming anything works end-to-end.
+**Current status: blind build phase complete; Coral + both agent runtimes since verified LIVE on
+Windows (2026-07-12, see `docs/api-verification.md` §11). Supermemory Local remains unverified —
+no binary on this machine.** See "What's NOT done" at the bottom before assuming the write path
+works end-to-end.
 
 ---
 
@@ -25,8 +25,9 @@ assuming anything works end-to-end.
 | `feat: ui backend proxy` | `src/ui/server.ts` — plain `node:http` handler: `GET /api/memories`, `GET /api/review` (degrades to `{supported:false}` instead of 500), `POST /api/review/:id`, `POST /api/forget` (dry-run forced true unless explicit `false`). Real HTTP round-trip tests against an ephemeral port. 7 tests. |
 | `feat: console frontend` | `src/ui/app/` — Vite + React SPA: `MemoryBrowser`, `ForgetConsole` (preview-then-confirm), `ReviewQueue` (renders nothing when unsupported). Tested via `react-dom/server`'s `renderToStaticMarkup` against fixture JSON — no jsdom/testing-library dependency needed. `ui/server.ts` extended to serve the built SPA as a static fallback with SPA-route fallback to `index.html`. 12 tests (9 component + 3 static-serving). |
 | `feat: dual agent runtimes (claude -p / agy) + multi-source connect` | `src/sync/agent.ts` extended with an `AgentRuntime` type (`claude` \| `agy`), `buildAgentArgs` centralizing both invocations, `--agent`/`CURATOR_AGENT` selection. `src/connect.ts` extended with `connectSources()` for multi-source `curator connect github linear slack` (sequential, stops at first failure). `buildMcpConfig` now resolves the CLI path to absolute. 10 new tests. |
+| `feat: verified agent runtimes live against coral, claude, and agy` | Coral/claude/agy found installed on Windows after all — whole tooling layer verified live. Corrections: claude dropped `--max-turns` (replaced with `--strict-mcp-config` + server-scoped `--allowedTools`); new `extractAgentText` unwraps claude's JSON `result` envelope; agy has no `--mcp-config`/`--output-format`, so new `writeAgyMcpConfig` merges Curator into `~/.gemini/antigravity-cli/mcp_config.json` (user entries preserved). Both runtimes pulled identical real GitHub PRs via Coral MCP and emitted parseable `CURSOR=` trailers. Curator's MCP passes A1 over real stdio. 6 new tests. |
 
-**Total: 10 commits, 75 passing tests across 11 test files, clean `tsc --noEmit` and `vite build`.**
+**Total: 11 commits, 81 passing tests across 11 test files, clean `tsc --noEmit` and `vite build`.**
 
 ---
 
@@ -42,15 +43,19 @@ assuming anything works end-to-end.
 
 ## What's NOT done — do not assume these work
 
-- **No real Supermemory Local, Coral, or `claude`/`agy` binary has ever been invoked.** Every endpoint path, payload shape, and CLI flag for those three externals is a best guess, explicitly marked `STATUS: UNVERIFIED` in `docs/api-verification.md`, with the exact commands to confirm them in `docs/linux-test-checklist.md`.
-- Acceptance tests A1–S1 (`docs/implementation-plan.md` §7) have **not** been run — they require the live stack.
+- **No real Supermemory Local has ever been reached.** Every endpoint path and payload shape in
+  `src/supermemory/ops.ts` is a best guess, marked `STATUS: UNVERIFIED` in
+  `docs/api-verification.md` §1–§9. (Coral, `claude`, and `agy` ARE now verified live — §11.)
+- The full write path (agent → curator `remember` → Supermemory Local) and acceptance tests A2–S1
+  (`docs/implementation-plan.md` §7) have **not** been run — they require the live memory engine.
+  A1 (MCP handshake, 4 tools) HAS passed over real stdio.
 - The memory-graph embed (`@supermemory/memory-graph`) is deferred — cut line 1, never started.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
 - The exact env var name Supermemory Local's installer writes (`SUPERMEMORY_API_KEY` is a guess) is unconfirmed.
 
 ## Next step
 
-Run `docs/linux-test-checklist.md` Part A (Phase 0 probes) on a Linux machine with the real
-binaries installed. Corrections from real verification should land in exactly one file each:
-`src/supermemory/ops.ts` for Supermemory endpoints, `src/sync/agent.ts` (`buildAgentArgs`,
-`buildMcpConfig`) for agent/Coral CLI flags. Then proceed to acceptance tests A1 → S1 in order.
+Get a running `supermemory-server` (Linux box, or Windows if the binary supports it) and run
+`docs/linux-test-checklist.md` Part A steps 1–5 (the Supermemory endpoint probes — steps 6–7 are
+already verified). Corrections land in exactly one file: `src/supermemory/ops.ts`. Then proceed to
+acceptance tests A2 → S1 in order (A1 already passes).
