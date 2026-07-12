@@ -127,6 +127,42 @@ the source, verify before shipping."
 
 ---
 
+## 10. Corrections from the installed `supermemory` npm SDK (v3.14.0)
+
+While wiring `src/supermemory/ops.ts`, I inspected the actual shipped type definitions in
+`node_modules/supermemory/resources/*.d.ts` (not just the hosted doc pages above — this is the
+real, versioned SDK contract). This is stronger evidence than the doc-page fetches above where
+noted, but it is a **hosted SDK**; whether Local implements the same resources is still
+**UNVERIFIED**.
+
+- **`client.search.memories({q, ...})`, `client.search.documents({q, ...})`, `client.search.execute({q, ...})`
+  all exist and confirm the query field name is `q`, not `query`.** This resolves the open question
+  in §2 above. Use `client.search.memories` for `ops.recall` (its doc comment says "Search memory
+  entries - Low latency for conversational", matching `docs/plan.md`'s description of `recall`).
+- **`client.memories.forget(body: {containerTag, id?, content?, reason?})`** exists for forgetting a
+  **single** memory (by id or exact content match) — this is the real shape of §5 "forget a single
+  memory", but note it is **not** a `DELETE /v4/memories` call from the SDK's perspective; the SDK
+  method wraps whatever the real transport is. Use this for `ops.forgetById`.
+- **`client.documents.add(body: DocumentAddParams)` and `client.memories.add(...)` both exist** for
+  storing content. Use `client.documents.add` for `ops.remember` (matches the `POST /v3/documents`
+  citation in `docs/plan.md` §6 and `docs/implementation-plan.md` §3).
+- **`client.memories.list(body: {containerTags, filters, includeContent, ...})`** exists and is the
+  closest match for §4 "list memory entries with history" — but its documented response
+  (`MemoryListResponse`) shows `id/title/summary/status/type/metadata/createdAt/updatedAt/content`
+  and does **not** show version-chain relation fields (`updates`/`extends`/`derives`) or `isLatest`
+  in the SDK's type definitions. **STATUS: UNVERIFIED whether the history/version-chain data is
+  present in the real response or requires a different call** — confirm on Linux; if absent, the
+  console's memory browser degrades to latest-entries-only per the Phase 0 gate in `docs/roadmap.md`.
+- **No `profile` resource and no `inferred`/`review` resource exist anywhere in this SDK version.**
+  Neither `/v4/profile` (§3) nor the review-queue endpoints (§7, §8) nor the agentic mass-forget
+  endpoint (§6, `/v4/memories/forget-matching`) are covered by any typed SDK method. **This means
+  `ops.getProfile`, `ops.listInferred`, `ops.reviewInferred`, and `ops.forgetByPrompt` must all use a
+  raw authenticated `fetch` (in `src/supermemory/client.ts`) against the best-guess paths from §3/§6/§7/§8
+  above — they cannot be typed against the SDK and are the highest-risk unverified surface in the
+  whole project.** This raises real doubt about whether these hosted-doc-only endpoints exist on
+  Local at all; Phase 0 on Linux must probe them directly and be prepared to degrade the console
+  per the gate decision.
+
 ## Isolation policy
 
 Every function in `src/supermemory/ops.ts` that calls one of the above endpoints carries an inline
