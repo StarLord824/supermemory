@@ -6,8 +6,8 @@ export function buildSyncPrompt(cursor: string, sources: string[]): string {
   return `You are Curator's sync agent. Your job: pull what changed in connected sources and store ONLY durable, useful memories in Supermemory Local.
 
 PROTOCOL — follow exactly:
-1. Discover schema: query coral tables (coral.tables) for sources: ${sources.join(", ")}.
-2. Fetch changes since ${cursor} using SQL. Select minimal columns. LIMIT 50.
+1. Discover schema with the coral \`list_catalog\` / \`describe_table\` tools (or \`sql\` on coral.tables) for sources: ${sources.join(", ")}.
+2. Fetch changes since ${cursor} with the coral \`sql\` tool. Select minimal columns. LIMIT 50.
 3. For each item, decide: is this worth remembering long-term (decisions, status changes, new issues/PRs, ownership, deadlines)? Skip noise (bot comments, CI chatter, trivial edits).
 4. Store each keeper with the curator \`remember\` tool:
    - customId: "{source}:{type}:{native_id}"  (MANDATORY — prevents duplicates)

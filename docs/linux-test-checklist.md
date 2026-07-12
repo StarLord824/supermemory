@@ -64,32 +64,27 @@ Companion reference for endpoint guesses: `docs/api-verification.md`. Full conte
    - If probe (b) fails → memory browser lists latest entries only, no version chains.
    - Everything else is required for the MVP demo path.
 
-6. **Coral**
+6. **Coral** — ✅ **already VERIFIED on Windows 2026-07-12** (see `docs/api-verification.md` §11):
+   `coral sql --format json`, `coral source add --interactive`, credential refresh via
+   `GITHUB_TOKEN=$(gh auth token) coral source add github`, `coral mcp-stdio` (5 MCP tools), and
+   the exact raw-sync query shape all work against live GitHub data. On Linux only re-run the
+   install + `coral source test github` to confirm the same setup exists there:
    ```bash
    brew install withcoral/tap/coral || curl -fsSL https://withcoral.com/install.sh | sh
-   coral source discover
-   GITHUB_TOKEN=<PAT> coral source add github
-   coral sql "SELECT number,title,state,updated_at FROM github.issues WHERE owner='<user>' AND repo='<repo>' AND state='open' LIMIT 5"
+   GITHUB_TOKEN=$(gh auth token) coral source add github
+   coral source test github
    ```
-   Pass: rows returned. Also run `coral sql --help` to confirm the actual JSON-output flag assumed
-   in `src/sync/raw.ts` (`--format json`) — correct the code if the real flag differs.
 
-7. **Headless agent runtimes** — Curator can drive either; verify whichever will run the demo
-   (both if available):
+7. **Headless agent runtimes** — ✅ **flags already VERIFIED on Windows 2026-07-12** against
+   claude 2.1.207 and agy 1.1.1, including live Coral-MCP reads from both
+   (`docs/api-verification.md` §11). Notable: claude dropped `--max-turns`; agy has no
+   `--mcp-config`/`--output-format` and reads `~/.gemini/antigravity-cli/mcp_config.json`.
+   On Linux just smoke the installed versions (flags can drift between releases):
    ```bash
-   # Claude Code (default runtime)
    claude -p "reply with the word ok" --output-format json
-   claude -p --help   # confirm --mcp-config / --output-format / --max-turns flag names
-
-   # Antigravity CLI (selected via `curator sync --agent agy` or CURATOR_AGENT=agy)
-   agy -p "reply with the word ok" --output-format json
-   agy --help         # confirm headless/prompt + MCP-config flag names
+   agy -p "reply with the word ok"
    ```
-   Pass: a JSON response containing "ok" from the runtime(s) you'll use. The `agy` invocation in
-   `src/sync/agent.ts` `buildAgentArgs` mirrors claude's flags as a best guess and is **UNVERIFIED** —
-   correct it there (single function) if `agy --help` shows different flag names. Also confirm
-   `coral mcp-stdio` is the real Coral MCP subcommand (`coral --help`); it is referenced in
-   `buildMcpConfig` and equally UNVERIFIED.
+   If either fails, `buildAgentArgs` in `src/sync/agent.ts` is the single place to correct.
 
 ---
 

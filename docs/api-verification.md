@@ -163,6 +163,44 @@ noted, but it is a **hosted SDK**; whether Local implements the same resources i
   Local at all; Phase 0 on Linux must probe them directly and be prepared to degrade the console
   per the gate decision.
 
+## 11. Windows verification session — Coral + agent runtimes (2026-07-12)
+
+Coral, `claude`, and `agy` turned out to be installed on the Windows build machine after all, so
+the tooling layer was verified live here. **Supermemory Local remains unverified** (no binary on
+this machine) — sections 1–9 still need the Linux pass.
+
+**Coral 0.4.1 — VERIFIED live:**
+- `coral sql "<query>" --format json` works and prints a plain JSON array — exactly what
+  `queryCoralGithubIssues` in `src/sync/raw.ts` expects. The exact `buildGithubQuery` shape
+  (columns `number, title, state, body, html_url, updated_at`, `WHERE owner/repo/updated_at >`)
+  executes against the live `github.issues` table; `github.pulls` requires a `state` filter
+  (`state='all'` works) and returned real rows.
+- `coral source add --interactive <name>` flag confirmed. Non-interactive mode reads inputs from
+  env vars matching each input key (github needs `GITHUB_TOKEN`); credential refresh via
+  `GITHUB_TOKEN=$(gh auth token) coral source add github` re-validated the source.
+- `coral mcp-stdio` confirmed: MCP handshake lists 5 tools — `sql`, `list_catalog`,
+  `search_catalog`, `describe_table`, `list_columns` (sync prompt references these names).
+
+**Curator MCP server — A1 VERIFIED over real stdio:** `node dist/cli.js mcp` handshakes and lists
+exactly `remember`, `recall`, `forget`, `get_profile` (previously only proven via in-memory
+transport).
+
+**claude 2.1.207 — VERIFIED live:** `-p`, `--mcp-config <files...>`, `--strict-mcp-config`,
+`--allowedTools` (server-scoped `mcp__coral` / `mcp__curator` form), `--output-format json`.
+**`--max-turns` no longer exists** and was removed from `buildAgentArgs`. JSON output is an
+envelope; the agent's text is in the `result` field (handled by `extractAgentText`). End-to-end
+run: headless claude called Coral's `sql` tool, returned real PR rows and the `CURSOR=` trailer,
+zero permission denials.
+
+**agy 1.1.1 (Antigravity CLI) — VERIFIED live:** `-p/--print` (plain-text output),
+`--dangerously-skip-permissions`, `--print-timeout` (default 5m). **It has NO `--mcp-config` and
+NO `--output-format`** — MCP servers are read from `~/.gemini/antigravity-cli/mcp_config.json`
+(same `mcpServers` schema; `writeAgyMcpConfig` merges Curator in while preserving user entries).
+End-to-end run: identical real PR data + `CURSOR=` trailer via Coral MCP.
+
+**Still open (Linux/live-Supermemory only):** everything in §1–§9, plus the full write path
+(agent → curator `remember` → Supermemory Local) and acceptance tests A2–S1.
+
 ## Isolation policy
 
 Every function in `src/supermemory/ops.ts` that calls one of the above endpoints carries an inline
