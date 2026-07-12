@@ -1,0 +1,18 @@
+[
+  {
+    "number": 41,
+    "title": "Fix flaky sync test",
+    "state": "open",
+    "body": "The idempotency test occasionally fails on CI.",
+    "html_url": "https://github.com/example/repo/issues/41",
+    "updated_at": "2026-07-10T12:00:00Z"
+  },
+  {
+    "number": 42,
+    "title": "Add dry-run preview to forget console",
+    "state": "closed",
+    "body": null,
+    "html_url": "https://github.com/example/repo/issues/42",
+    "updated_at": "2026-07-11T09:30:00Z"
+  }
+]
