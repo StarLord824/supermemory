@@ -74,12 +74,22 @@ Companion reference for endpoint guesses: `docs/api-verification.md`. Full conte
    Pass: rows returned. Also run `coral sql --help` to confirm the actual JSON-output flag assumed
    in `src/sync/raw.ts` (`--format json`) — correct the code if the real flag differs.
 
-7. **Headless Claude**
+7. **Headless agent runtimes** — Curator can drive either; verify whichever will run the demo
+   (both if available):
    ```bash
+   # Claude Code (default runtime)
    claude -p "reply with the word ok" --output-format json
+   claude -p --help   # confirm --mcp-config / --output-format / --max-turns flag names
+
+   # Antigravity CLI (selected via `curator sync --agent agy` or CURATOR_AGENT=agy)
+   agy -p "reply with the word ok" --output-format json
+   agy --help         # confirm headless/prompt + MCP-config flag names
    ```
-   Pass: JSON response containing "ok". Also confirm the `--mcp-config` and `--max-turns` flag names
-   assumed in `src/sync/agent.ts` via `claude -p --help`.
+   Pass: a JSON response containing "ok" from the runtime(s) you'll use. The `agy` invocation in
+   `src/sync/agent.ts` `buildAgentArgs` mirrors claude's flags as a best guess and is **UNVERIFIED** —
+   correct it there (single function) if `agy --help` shows different flag names. Also confirm
+   `coral mcp-stdio` is the real Coral MCP subcommand (`coral --help`); it is referenced in
+   `buildMcpConfig` and equally UNVERIFIED.
 
 ---
 

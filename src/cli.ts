@@ -43,14 +43,18 @@ program
   .command("sync")
   .description("Sync data from connected agentic sources into Supermemory Local")
   .option("--raw", "Deterministic sync: fixed Coral SQL query, no agent in the loop")
-  .action(async (opts: { raw?: boolean }) => {
+  .option(
+    "--agent <runtime>",
+    "Headless agent runtime to drive: claude (Claude Code) or agy (Antigravity CLI). Falls back to CURATOR_AGENT, then claude",
+  )
+  .action(async (opts: { raw?: boolean; agent?: string }) => {
     try {
       if (opts.raw) {
         const { runRawSync } = await import("./sync/raw.js");
         await runRawSync();
       } else {
         const { runAgentSync } = await import("./sync/agent.js");
-        await runAgentSync();
+        await runAgentSync(opts.agent);
       }
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
@@ -60,12 +64,12 @@ program
 
 program
   .command("connect")
-  .argument("<source>", "Coral source to connect, e.g. github")
-  .description("Wraps `coral source add --interactive <source>`")
-  .action(async (source: string) => {
+  .argument("<sources...>", "Coral source(s) to connect, e.g. github linear slack")
+  .description("Wraps `coral source add --interactive <source>` for each source in turn")
+  .action(async (sources: string[]) => {
     try {
-      const { connectSource } = await import("./connect.js");
-      await connectSource(source);
+      const { connectSources } = await import("./connect.js");
+      await connectSources(sources);
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
