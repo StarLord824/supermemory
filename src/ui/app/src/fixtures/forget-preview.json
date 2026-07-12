@@ -1,0 +1,10 @@
+{
+  "dryRun": true,
+  "count": 2,
+  "forgetBatchId": null,
+  "summary": "2 memories match \"everything about client X\"",
+  "candidates": [
+    { "id": "mem_1", "memory": "Client X wants the report by Friday", "score": 0.91 },
+    { "id": "mem_2", "memory": "Client X's contact is Priya", "score": 0.83 }
+  ]
+}

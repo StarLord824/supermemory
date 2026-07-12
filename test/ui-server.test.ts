@@ -1,5 +1,8 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type Supermemory from "supermemory";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createUiRequestHandler } from "../src/ui/server.js";
@@ -14,8 +17,8 @@ function fakeClient(overrides: Record<string, unknown>): Supermemory {
   return overrides as unknown as Supermemory;
 }
 
-function startTestServer(client: Supermemory) {
-  const handler = createUiRequestHandler({ config, client });
+function startTestServer(client: Supermemory, staticRoot?: string) {
+  const handler = createUiRequestHandler({ config, client, staticRoot });
   server = createServer((req, res) => void handler(req, res));
   return new Promise<void>((resolve) => {
     server.listen(0, () => {
@@ -125,6 +128,48 @@ describe("unknown routes", () => {
   it("returns 404", async () => {
     await startTestServer(fakeClient({}));
     const res = await fetch(`${baseUrl}/api/nonexistent`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("static SPA serving", () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("serves an existing asset with the right content-type", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "curator-ui-static-"));
+    writeFileSync(join(tmpDir, "index.html"), "<html><body>curator</body></html>");
+    mkdirSync(join(tmpDir, "assets"));
+    writeFileSync(join(tmpDir, "assets", "index.js"), "console.log('hi')");
+
+    await startTestServer(fakeClient({}), tmpDir);
+    const res = await fetch(`${baseUrl}/assets/index.js`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/javascript");
+    expect(await res.text()).toBe("console.log('hi')");
+  });
+
+  it("falls back to index.html for an unrecognized client-side route", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "curator-ui-static-"));
+    writeFileSync(join(tmpDir, "index.html"), "<html><body>curator</body></html>");
+
+    await startTestServer(fakeClient({}), tmpDir);
+    const res = await fetch(`${baseUrl}/some/client/route`);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("curator");
+  });
+
+  it("returns 404 when the SPA hasn't been built and no fallback exists", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "curator-ui-static-empty-"));
+
+    await startTestServer(fakeClient({}), tmpDir);
+    const res = await fetch(`${baseUrl}/`);
+
     expect(res.status).toBe(404);
   });
 });

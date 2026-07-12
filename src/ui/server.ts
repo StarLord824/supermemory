@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import { extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 import type Supermemory from "supermemory";
 import { resolveConfig, type CuratorConfig } from "../config.js";
 import { createClient } from "../supermemory/client.js";
@@ -12,10 +15,24 @@ import {
 } from "../supermemory/ops.js";
 
 const DEFAULT_CONTAINER_TAG = "curator_default";
+const DEFAULT_STATIC_ROOT = fileURLToPath(new URL("./app", import.meta.url));
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+};
 
 export interface UiServerDeps {
   config: CuratorConfig;
   client: Supermemory;
+  /** Directory containing the built SPA (index.html + assets). */
+  staticRoot?: string;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -41,10 +58,35 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 }
 
 /**
- * Builds the request handler for `curator ui`'s JSON API. All Supermemory
- * access goes through src/supermemory/ops.ts — the key never reaches the
- * browser since this handler runs server-side and the SPA only talks to
- * these routes.
+ * Serves a file from the built SPA directory, falling back to index.html for
+ * any non-asset GET path (client-side routing). Returns false if nothing
+ * could be served (e.g. the SPA hasn't been built yet via `pnpm build:ui`),
+ * letting the caller send its own 404.
+ */
+async function serveStatic(staticRoot: string, pathname: string, res: ServerResponse): Promise<boolean> {
+  const safePath = normalize(pathname).replace(/^(\.\.[/\\])+/, "");
+  const candidate = join(staticRoot, safePath === "/" ? "index.html" : safePath);
+
+  for (const filePath of [candidate, join(staticRoot, "index.html")]) {
+    try {
+      const contents = await readFile(filePath);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", MIME_TYPES[extname(filePath)] ?? "application/octet-stream");
+      res.end(contents);
+      return true;
+    } catch {
+      // try the next candidate (SPA fallback to index.html)
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Builds the request handler for `curator ui`: the JSON API plus the built
+ * SPA as a static-file fallback. All Supermemory access goes through
+ * src/supermemory/ops.ts — the key never reaches the browser since this
+ * handler runs server-side and the SPA only talks to the /api/* routes.
  */
 export function createUiRequestHandler(deps: UiServerDeps) {
   return async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -107,6 +149,11 @@ export function createUiRequestHandler(deps: UiServerDeps) {
         return sendJson(res, 200, result);
       }
 
+      if (req.method === "GET" && !url.pathname.startsWith("/api/")) {
+        const served = await serveStatic(deps.staticRoot ?? DEFAULT_STATIC_ROOT, url.pathname, res);
+        if (served) return;
+      }
+
       sendJson(res, 404, { error: `no route for ${req.method} ${url.pathname}` });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -118,7 +165,7 @@ export function createUiRequestHandler(deps: UiServerDeps) {
 export async function startUiServer(port: number): Promise<void> {
   const config = resolveConfig();
   const client = createClient(config);
-  const handler = createUiRequestHandler({ config, client });
+  const handler = createUiRequestHandler({ config, client, staticRoot: DEFAULT_STATIC_ROOT });
   const server = createServer((req, res) => {
     void handler(req, res);
   });

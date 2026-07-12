@@ -1,0 +1,13 @@
+{
+  "supported": true,
+  "memories": [
+    {
+      "id": "inf_1",
+      "memory": "User prefers dark mode",
+      "parentCount": 2,
+      "createdAt": "2026-07-11T08:00:00Z",
+      "updatedAt": "2026-07-11T08:00:00Z"
+    }
+  ],
+  "total": 1
+}
