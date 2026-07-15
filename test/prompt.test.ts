@@ -19,6 +19,17 @@ describe("buildSyncPrompt", () => {
     const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"]);
     expect(prompt).toContain("CURSOR=<iso>");
   });
+
+  it("injects a FOCUS block when an instruction is provided", () => {
+    const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"], "only merged PRs touching auth");
+    expect(prompt).toContain("FOCUS");
+    expect(prompt).toContain("only merged PRs touching auth");
+  });
+
+  it("omits the FOCUS block when no instruction (or a blank one) is given", () => {
+    expect(buildSyncPrompt("2026-07-01T00:00:00Z", ["github"])).not.toContain("FOCUS");
+    expect(buildSyncPrompt("2026-07-01T00:00:00Z", ["github"], "   ")).not.toContain("FOCUS");
+  });
 });
 
 describe("parseCursorFromOutput", () => {

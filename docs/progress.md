@@ -4,10 +4,12 @@ Snapshot of what's been built since `git init`, for anyone (including future-us)
 mid-stream. Read `docs/context.md` → `docs/plan.md` → `docs/roadmap.md` →
 `docs/implementation-plan.md` for the why/what/when/how; this file is "where are we right now."
 
-**Current status: blind build phase complete; Coral + both agent runtimes since verified LIVE on
-Windows (2026-07-12, see `docs/api-verification.md` §11). Supermemory Local remains unverified —
-no binary on this machine.** See "What's NOT done" at the bottom before assuming the write path
-works end-to-end.
+**Current status: blind build phase complete; Coral + both agent runtimes verified LIVE on Windows
+(2026-07-12, see `docs/api-verification.md` §11), and the new instruction/review-staging layer
+verified LIVE end-to-end (real Coral data, real claude, real scoped output, real staged file — see
+the `feat: instruction + review-staging` row below). Supermemory Local remains unverified — no
+binary on this machine.** See "What's NOT done" at the bottom before assuming the write path works
+end-to-end.
 
 ---
 
@@ -26,8 +28,9 @@ works end-to-end.
 | `feat: console frontend` | `src/ui/app/` — Vite + React SPA: `MemoryBrowser`, `ForgetConsole` (preview-then-confirm), `ReviewQueue` (renders nothing when unsupported). Tested via `react-dom/server`'s `renderToStaticMarkup` against fixture JSON — no jsdom/testing-library dependency needed. `ui/server.ts` extended to serve the built SPA as a static fallback with SPA-route fallback to `index.html`. 12 tests (9 component + 3 static-serving). |
 | `feat: dual agent runtimes (claude -p / agy) + multi-source connect` | `src/sync/agent.ts` extended with an `AgentRuntime` type (`claude` \| `agy`), `buildAgentArgs` centralizing both invocations, `--agent`/`CURATOR_AGENT` selection. `src/connect.ts` extended with `connectSources()` for multi-source `curator connect github linear slack` (sequential, stops at first failure). `buildMcpConfig` now resolves the CLI path to absolute. 10 new tests. |
 | `feat: verified agent runtimes live against coral, claude, and agy` | Coral/claude/agy found installed on Windows after all — whole tooling layer verified live. Corrections: claude dropped `--max-turns` (replaced with `--strict-mcp-config` + server-scoped `--allowedTools`); new `extractAgentText` unwraps claude's JSON `result` envelope; agy has no `--mcp-config`/`--output-format`, so new `writeAgyMcpConfig` merges Curator into `~/.gemini/antigravity-cli/mcp_config.json` (user entries preserved). Both runtimes pulled identical real GitHub PRs via Coral MCP and emitted parseable `CURSOR=` trailers. Curator's MCP passes A1 over real stdio. 6 new tests. |
+| `feat: sync --instruction + human review staging (--review / --commit)` | Operator steering + pre-ingestion governance for agentic sync. `buildSyncPrompt` gains an optional FOCUS block (`--instruction` / `CURATOR_INSTRUCTION`). New `src/sync/staging.ts` (JSONL stage/read/clear); the MCP `remember` tool stages to `~/.curator/staged.jsonl` instead of writing when the spawned agent's mcp-config sets `CURATOR_REMEMBER_MODE=stage` (per-server `env` injection in `buildMcpConfig`, both runtimes). `curator sync --review` clears stale stagings, runs the agent in stage mode, parks the reported cursor as `agent-sync-pending` (live cursor untouched); `curator sync --commit` (`runCommit`) flushes staged memories through `ops.remember`, promotes the pending cursor, clears the stage file. Flag guards: `--review` rejects `--raw`; `--instruction` warned-ignored with `--raw`. **Verified live:** real `claude` + Coral run with an instruction stored exactly 1 scoped memory into the real stage file, skipped 49 out-of-scope PRs, and wrote nothing to Supermemory. 18 new tests. |
 
-**Total: 11 commits, 81 passing tests across 11 test files, clean `tsc --noEmit` and `vite build`.**
+**Total: 12 commits, 99 passing tests across 12 test files, clean `tsc --noEmit` and `vite build`.**
 
 ---
 
@@ -35,8 +38,9 @@ works end-to-end.
 
 - `pnpm build` — compiles the CLI/backend cleanly.
 - `pnpm run build:ui` — builds the console SPA into `dist/ui/app`.
-- `pnpm test` — 75 tests green.
-- `node dist/cli.js --help` / `status` / `mcp` / `sync --raw` / `sync --agent <bad>` / `connect --help` — all fail or succeed with clean, actionable one-line messages, never a raw stack trace.
+- `pnpm test` — 99 tests green.
+- `node dist/cli.js --help` / `status` / `mcp` / `sync --raw` / `sync --agent <bad>` / `sync --raw --review` / `connect --help` — all fail or succeed with clean, actionable one-line messages, never a raw stack trace.
+- The full review loop minus the final write: `curator sync --review --instruction "<focus>"` runs a real agent against real Coral data, stages scoped proposals to `~/.curator/staged.jsonl`, and leaves the live cursor untouched; `curator sync --commit` is the only step that needs Supermemory.
 - The MCP server's tool surface (4 tools, dry-run-by-default forget) is verified via a real in-process MCP handshake.
 - The UI backend's routes are verified via real HTTP requests against an ephemeral port.
 - The console components render correctly against fixture data shaped like the (unverified) API responses.
@@ -48,7 +52,8 @@ works end-to-end.
   `docs/api-verification.md` §1–§9. (Coral, `claude`, and `agy` ARE now verified live — §11.)
 - The full write path (agent → curator `remember` → Supermemory Local) and acceptance tests A2–S1
   (`docs/implementation-plan.md` §7) have **not** been run — they require the live memory engine.
-  A1 (MCP handshake, 4 tools) HAS passed over real stdio.
+  A1 (MCP handshake, 4 tools) HAS passed over real stdio. `curator sync --commit` (the staged-flush
+  write path) fails with a clean connection error here, as expected with no server.
 - The memory-graph embed (`@supermemory/memory-graph`) is deferred — cut line 1, never started.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
 - The exact env var name Supermemory Local's installer writes (`SUPERMEMORY_API_KEY` is a guess) is unconfirmed.

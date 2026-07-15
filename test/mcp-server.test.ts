@@ -1,8 +1,12 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type Supermemory from "supermemory";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMcpServer } from "../src/mcp/server.js";
+import { readStaged } from "../src/sync/staging.js";
 import type { CuratorConfig } from "../src/config.js";
 
 const config: CuratorConfig = { apiKey: "sm_test_key", baseUrl: "http://localhost:6767" };
@@ -37,6 +41,45 @@ describe("MCP server", () => {
 
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ content: "hackathon deadline is July 13" }));
     expect(result.isError).toBeFalsy();
+  });
+
+  describe("remember in review/stage mode", () => {
+    let tmpDir: string;
+    let stageFile: string;
+
+    beforeEach(() => {
+      tmpDir = mkdtempSync(join(tmpdir(), "curator-mcp-stage-"));
+      stageFile = join(tmpDir, "staged.jsonl");
+      process.env.CURATOR_REMEMBER_MODE = "stage";
+      process.env.CURATOR_STAGE_FILE = stageFile;
+    });
+
+    afterEach(() => {
+      delete process.env.CURATOR_REMEMBER_MODE;
+      delete process.env.CURATOR_STAGE_FILE;
+      if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("stages the proposal to the stage file instead of calling ops.remember", async () => {
+      const add = vi.fn();
+      const client = await connectedClient(fakeClient({ documents: { add } }));
+
+      const result = await client.callTool({
+        name: "remember",
+        arguments: { content: "PR #42 merged", customId: "github:pull:42", containerTag: "src_github" },
+      });
+
+      expect(add).not.toHaveBeenCalled();
+      expect(result.isError).toBeFalsy();
+
+      const staged = readStaged(stageFile);
+      expect(staged).toHaveLength(1);
+      expect(staged[0]).toMatchObject({
+        content: "PR #42 merged",
+        customId: "github:pull:42",
+        containerTag: "src_github",
+      });
+    });
   });
 
   it("forget defaults dryRun to true and does not call forgetById for mode:'id'", async () => {

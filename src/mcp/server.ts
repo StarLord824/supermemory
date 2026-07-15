@@ -9,6 +9,7 @@ import {
   recall,
   remember,
 } from "../supermemory/ops.js";
+import { stageMemory } from "../sync/staging.js";
 
 const DEFAULT_CONTAINER_TAG = "curator_default";
 
@@ -55,7 +56,19 @@ export function createMcpServer(client: Supermemory, config: CuratorConfig): Mcp
       },
     },
     async ({ content, containerTag, customId, metadata }) =>
-      withErrorHandling(() => remember(client, { content, containerTag, customId, metadata })),
+      withErrorHandling<unknown>(() => {
+        // Review mode (set by `curator sync --review` via the spawned agent's
+        // mcp-config env): stage the proposed memory to a local file instead
+        // of writing to Supermemory, so a human can preview before committing.
+        if (process.env.CURATOR_REMEMBER_MODE === "stage") {
+          const staged = stageMemory(
+            { content, containerTag, customId, metadata },
+            process.env.CURATOR_STAGE_FILE,
+          );
+          return Promise.resolve({ staged: true, ...staged });
+        }
+        return remember(client, { content, containerTag, customId, metadata });
+      }),
   );
 
   server.registerTool(

@@ -2,8 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { getCursor, setCursor } from "../state.js";
+import type Supermemory from "supermemory";
+import { resolveConfig, type CuratorConfig } from "../config.js";
+import { createClient } from "../supermemory/client.js";
+import { remember } from "../supermemory/ops.js";
+import { deleteCursor, getCursor, setCursor } from "../state.js";
 import { buildSyncPrompt, parseCursorFromOutput } from "./prompt.js";
+import { clearStaged, defaultStageFile, readStaged } from "./staging.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const EPOCH = new Date(0).toISOString();
@@ -92,19 +97,40 @@ export function extractAgentText(runtime: AgentRuntime, stdout: string): string 
   return stdout;
 }
 
-export interface McpConfig {
-  mcpServers: Record<string, { command: string; args: string[] }>;
+export interface McpServerSpec {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
 }
 
-export function buildMcpConfig(curatorCliPath: string): McpConfig {
+export interface McpConfig {
+  mcpServers: Record<string, McpServerSpec>;
+}
+
+/**
+ * When `stage` is provided, the curator MCP server is launched in review
+ * mode: its `remember` tool stages proposals to `stage.stageFile` instead of
+ * writing to Supermemory (see src/mcp/server.ts + src/sync/staging.ts).
+ */
+export function buildMcpConfig(
+  curatorCliPath: string,
+  stage?: { stageFile: string },
+): McpConfig {
+  const curatorEnv = stage
+    ? { CURATOR_REMEMBER_MODE: "stage", CURATOR_STAGE_FILE: stage.stageFile }
+    : undefined;
+
   return {
     mcpServers: {
-      // Coral's built-in MCP server (read path). `coral mcp-stdio` is
-      // UNVERIFIED — confirm the subcommand via `coral --help` on Linux.
+      // Coral's built-in MCP server (read path). Verified on Windows.
       coral: { command: "coral", args: ["mcp-stdio"] },
       // Curator's own MCP server (write path). Absolute path so the config
       // works regardless of the agent's working directory.
-      curator: { command: "node", args: [resolve(curatorCliPath), "mcp"] },
+      curator: {
+        command: "node",
+        args: [resolve(curatorCliPath), "mcp"],
+        ...(curatorEnv ? { env: curatorEnv } : {}),
+      },
     },
   };
 }
@@ -117,9 +143,10 @@ export function buildMcpConfig(curatorCliPath: string): McpConfig {
 export function writeMcpConfig(
   curatorCliPath: string,
   mcpConfigPath: string = join(homedir(), ".curator", "mcp-config.json"),
+  stage?: { stageFile: string },
 ): string {
   mkdirSync(dirname(mcpConfigPath), { recursive: true });
-  writeFileSync(mcpConfigPath, JSON.stringify(buildMcpConfig(curatorCliPath), null, 2), "utf8");
+  writeFileSync(mcpConfigPath, JSON.stringify(buildMcpConfig(curatorCliPath, stage), null, 2), "utf8");
   return mcpConfigPath;
 }
 
@@ -138,6 +165,7 @@ export function agyMcpConfigPath(): string {
 export function writeAgyMcpConfig(
   curatorCliPath: string,
   configPath: string = agyMcpConfigPath(),
+  stage?: { stageFile: string },
 ): string {
   let existing: Partial<McpConfig> = {};
   try {
@@ -146,7 +174,7 @@ export function writeAgyMcpConfig(
     // no config yet — start fresh
   }
 
-  const ours = buildMcpConfig(curatorCliPath).mcpServers;
+  const ours = buildMcpConfig(curatorCliPath, stage).mcpServers;
   const merged: McpConfig = {
     ...existing,
     mcpServers: {
@@ -221,27 +249,47 @@ export function spawnSyncAgent(options: SpawnSyncAgentOptions): Promise<SpawnSyn
 export interface RunAgentSyncOptions {
   sources: string[];
   runtime?: AgentRuntime;
+  /** Free-text steer for what kind of data to pull/prioritize. */
+  instruction?: string;
+  /**
+   * Review mode: the agent stages proposals to a local file instead of
+   * writing to Supermemory. Preview them, then `curator sync --commit`.
+   */
+  review?: boolean;
   statePath?: string;
+  stageFile?: string;
   curatorCliPath?: string;
   mcpConfigPath?: string;
   spawnFn?: typeof spawn;
 }
 
 const AGENT_SYNC_CURSOR_KEY = "agent-sync";
+/** Cursor value the agent produced in review mode, applied only on --commit. */
+const AGENT_SYNC_PENDING_CURSOR_KEY = "agent-sync-pending";
 
 export async function runAgentSyncCore(options: RunAgentSyncOptions): Promise<void> {
   const runtime = options.runtime ?? "claude";
+  const review = options.review ?? false;
   const cursor = getCursor(AGENT_SYNC_CURSOR_KEY, options.statePath) ?? EPOCH;
-  const prompt = buildSyncPrompt(cursor, options.sources);
+  const prompt = buildSyncPrompt(cursor, options.sources, options.instruction);
   const cliPath = options.curatorCliPath ?? process.argv[1] ?? "dist/cli.js";
+
+  // In review mode the curator MCP server stages to this file instead of
+  // writing to Supermemory. Clear it first so each run is a fresh proposal set.
+  const stageFile = options.stageFile ?? defaultStageFile();
+  const stage = review ? { stageFile } : undefined;
+  if (review) clearStaged(stageFile);
 
   // claude takes the config via --mcp-config; agy only reads its own file.
   const mcpConfigPath =
     runtime === "agy"
-      ? writeAgyMcpConfig(cliPath, options.mcpConfigPath)
-      : writeMcpConfig(cliPath, options.mcpConfigPath);
+      ? writeAgyMcpConfig(cliPath, options.mcpConfigPath, stage)
+      : writeMcpConfig(cliPath, options.mcpConfigPath, stage);
 
-  console.log(`Running sync agent (${runtime}) over sources: ${options.sources.join(", ")}`);
+  const modeNote = review ? " [review: staging, not writing]" : "";
+  console.log(
+    `Running sync agent (${runtime}) over sources: ${options.sources.join(", ")}${modeNote}`,
+  );
   const { stdout, timedOut } = await spawnSyncAgent({
     prompt,
     mcpConfigPath,
@@ -257,6 +305,21 @@ export async function runAgentSyncCore(options: RunAgentSyncOptions): Promise<vo
   }
 
   const newCursor = parseCursorFromOutput(agentText);
+
+  if (review) {
+    // Do NOT advance the live cursor — nothing was written yet. Park the
+    // cursor as pending so --commit can advance it once the staged memories
+    // are actually flushed.
+    const staged = readStaged(stageFile);
+    if (newCursor) setCursor(AGENT_SYNC_PENDING_CURSOR_KEY, newCursor, options.statePath);
+    console.log(
+      `\n${staged.length} memories staged for review at ${stageFile}.` +
+        `\nReview them, then run \`curator sync --commit\` to write them to Supermemory` +
+        `${newCursor ? ` and advance the cursor to ${newCursor}` : ""}.`,
+    );
+    return;
+  }
+
   if (newCursor) {
     setCursor(AGENT_SYNC_CURSOR_KEY, newCursor, options.statePath);
   } else {
@@ -264,13 +327,68 @@ export async function runAgentSyncCore(options: RunAgentSyncOptions): Promise<vo
   }
 }
 
+export interface RunCommitOptions {
+  statePath?: string;
+  stageFile?: string;
+  config?: CuratorConfig;
+  client?: Supermemory;
+}
+
+/**
+ * Flushes memories staged by `curator sync --review` into Supermemory Local,
+ * then advances the live cursor to the pending value the review run parked and
+ * clears both the stage file and the pending cursor. This is the only part of
+ * the review flow that touches Supermemory.
+ */
+export async function runCommit(options: RunCommitOptions = {}): Promise<{ committed: number }> {
+  const stageFile = options.stageFile ?? defaultStageFile();
+  const staged = readStaged(stageFile);
+
+  if (staged.length === 0) {
+    console.log("Nothing staged to commit. Run `curator sync --review` first.");
+    return { committed: 0 };
+  }
+
+  const config = options.config ?? resolveConfig();
+  const client = options.client ?? createClient(config);
+
+  for (const item of staged) {
+    await remember(client, {
+      content: item.content,
+      containerTag: item.containerTag,
+      customId: item.customId,
+      metadata: item.metadata,
+    });
+  }
+
+  const pending = getCursor(AGENT_SYNC_PENDING_CURSOR_KEY, options.statePath);
+  if (pending) {
+    setCursor(AGENT_SYNC_CURSOR_KEY, pending, options.statePath);
+    deleteCursor(AGENT_SYNC_PENDING_CURSOR_KEY, options.statePath);
+  }
+  clearStaged(stageFile);
+
+  console.log(
+    `Committed ${staged.length} staged memories to Supermemory` +
+      `${pending ? `; cursor advanced to ${pending}` : ""}.`,
+  );
+  return { committed: staged.length };
+}
+
+export interface RunAgentSyncCliOptions {
+  runtime?: string;
+  instruction?: string;
+  review?: boolean;
+}
+
 /**
  * CLI-facing entry point. Sources come from CURATOR_SOURCES (comma-separated,
- * default "github"); the runtime from the --agent CLI option, falling back to
- * the CURATOR_AGENT env var, then "claude".
+ * default "github"); runtime from --agent then CURATOR_AGENT then "claude";
+ * instruction from --instruction then CURATOR_INSTRUCTION.
  */
-export async function runAgentSync(runtimeArg?: string): Promise<void> {
+export async function runAgentSync(options: RunAgentSyncCliOptions = {}): Promise<void> {
   const sources = (process.env.CURATOR_SOURCES ?? "github").split(",").map((s) => s.trim());
-  const runtime = resolveAgentRuntime(runtimeArg ?? process.env.CURATOR_AGENT);
-  await runAgentSyncCore({ sources, runtime });
+  const runtime = resolveAgentRuntime(options.runtime ?? process.env.CURATOR_AGENT);
+  const instruction = options.instruction ?? process.env.CURATOR_INSTRUCTION;
+  await runAgentSyncCore({ sources, runtime, instruction, review: options.review });
 }

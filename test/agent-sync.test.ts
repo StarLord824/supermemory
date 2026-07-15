@@ -2,17 +2,21 @@ import { EventEmitter } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type Supermemory from "supermemory";
 import {
   buildAgentArgs,
   buildMcpConfig,
   extractAgentText,
   resolveAgentRuntime,
   runAgentSyncCore,
+  runCommit,
   writeAgyMcpConfig,
   writeMcpConfig,
 } from "../src/sync/agent.js";
 import { getCursor, setCursor } from "../src/state.js";
+import { readStaged, stageMemory } from "../src/sync/staging.js";
+import type { CuratorConfig } from "../src/config.js";
 
 class FakeChildProcess extends EventEmitter {
   stdout = new EventEmitter();
@@ -101,6 +105,19 @@ describe("buildMcpConfig", () => {
   it("resolves a relative cli path to absolute so the config works from any cwd", () => {
     const config = buildMcpConfig("dist/cli.js");
     expect(config.mcpServers.curator.args[0]).toBe(resolve("dist/cli.js"));
+  });
+
+  it("omits env by default (direct-write mode)", () => {
+    const config = buildMcpConfig("/abs/dist/cli.js");
+    expect(config.mcpServers.curator.env).toBeUndefined();
+  });
+
+  it("injects CURATOR_REMEMBER_MODE=stage and the stage file path when staging", () => {
+    const config = buildMcpConfig("/abs/dist/cli.js", { stageFile: "/tmp/staged.jsonl" });
+    expect(config.mcpServers.curator.env).toEqual({
+      CURATOR_REMEMBER_MODE: "stage",
+      CURATOR_STAGE_FILE: "/tmp/staged.jsonl",
+    });
   });
 });
 
@@ -243,5 +260,169 @@ describe("runAgentSyncCore", () => {
     });
 
     expect(getCursor("agent-sync", statePath)).toBe("2026-07-01T00:00:00Z");
+  });
+
+  it("threads the instruction into the prompt sent to the agent", async () => {
+    freshPaths();
+    const spawnFn = fakeSpawnFn("stored 1 item\nCURSOR=2026-07-12T10:00:00Z");
+
+    await runAgentSyncCore({
+      sources: ["github"],
+      instruction: "only merged PRs touching auth",
+      statePath,
+      mcpConfigPath,
+      curatorCliPath: "/abs/dist/cli.js",
+      spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+    });
+
+    const promptArg = spawnFn.mock.calls[0][1][1] as string;
+    expect(promptArg).toContain("only merged PRs touching auth");
+  });
+
+  describe("review mode", () => {
+    let stageFile: string;
+
+    beforeEach(() => {
+      freshPaths();
+      stageFile = join(tmpDir, "staged.jsonl");
+    });
+
+    it("does not advance the live cursor, and parks the agent's reported cursor as pending", async () => {
+      const spawnFn = fakeSpawnFn("stored 2 items\nCURSOR=2026-07-12T10:00:00Z");
+
+      await runAgentSyncCore({
+        sources: ["github"],
+        review: true,
+        statePath,
+        stageFile,
+        mcpConfigPath,
+        curatorCliPath: "/abs/dist/cli.js",
+        spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+      });
+
+      expect(getCursor("agent-sync", statePath)).toBeUndefined();
+      expect(getCursor("agent-sync-pending", statePath)).toBe("2026-07-12T10:00:00Z");
+    });
+
+    it("writes the mcp config with CURATOR_REMEMBER_MODE=stage pointed at the stage file", async () => {
+      const spawnFn = fakeSpawnFn("stored 1 item\nCURSOR=2026-07-12T10:00:00Z");
+
+      await runAgentSyncCore({
+        sources: ["github"],
+        review: true,
+        statePath,
+        stageFile,
+        mcpConfigPath,
+        curatorCliPath: "/abs/dist/cli.js",
+        spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+      });
+
+      const written = JSON.parse(readFileSync(mcpConfigPath, "utf8"));
+      expect(written.mcpServers.curator.env).toEqual({
+        CURATOR_REMEMBER_MODE: "stage",
+        CURATOR_STAGE_FILE: stageFile,
+      });
+    });
+
+    it("clears any stale staged items before starting a new review run", async () => {
+      stageMemory({ content: "leftover from a previous run" }, stageFile);
+      const spawnFn = fakeSpawnFn("stored 0 items\nCURSOR=2026-07-12T10:00:00Z");
+
+      await runAgentSyncCore({
+        sources: ["github"],
+        review: true,
+        statePath,
+        stageFile,
+        mcpConfigPath,
+        curatorCliPath: "/abs/dist/cli.js",
+        spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+      });
+
+      expect(readStaged(stageFile)).toEqual([]);
+    });
+
+    it("does not write the direct (non-stage) mcp config in review mode", async () => {
+      const spawnFn = fakeSpawnFn("stored 0 items");
+
+      await runAgentSyncCore({
+        sources: ["github"],
+        review: true,
+        statePath,
+        stageFile,
+        mcpConfigPath,
+        curatorCliPath: "/abs/dist/cli.js",
+        spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+      });
+
+      const written = JSON.parse(readFileSync(mcpConfigPath, "utf8"));
+      expect(written.mcpServers.curator.env).toBeDefined();
+    });
+  });
+});
+
+describe("runCommit", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let stageFile: string;
+
+  afterEach(() => {
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function freshPaths() {
+    tmpDir = mkdtempSync(join(tmpdir(), "curator-commit-"));
+    statePath = join(tmpDir, "state.json");
+    stageFile = join(tmpDir, "staged.jsonl");
+  }
+
+  function fakeSmClient(add: ReturnType<typeof vi.fn>): Supermemory {
+    return { documents: { add } } as unknown as Supermemory;
+  }
+
+  const config: CuratorConfig = { apiKey: "sm_test_key", baseUrl: "http://localhost:6767" };
+
+  it("writes every staged memory to Supermemory via ops.remember", async () => {
+    freshPaths();
+    stageMemory({ content: "PR #1 merged", customId: "github:pull:1", containerTag: "src_github" }, stageFile);
+    stageMemory({ content: "Issue #2 closed", customId: "github:issue:2" }, stageFile);
+    const add = vi.fn().mockResolvedValue({ id: "doc_1", status: "queued" });
+
+    const result = await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+
+    expect(result.committed).toBe(2);
+    expect(add).toHaveBeenCalledTimes(2);
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ customId: "github:pull:1" }));
+  });
+
+  it("advances the live cursor to the pending value and clears the pending cursor", async () => {
+    freshPaths();
+    setCursor("agent-sync-pending", "2026-07-12T10:00:00Z", statePath);
+    stageMemory({ content: "x" }, stageFile);
+    const add = vi.fn().mockResolvedValue({ id: "doc_1", status: "queued" });
+
+    await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+
+    expect(getCursor("agent-sync", statePath)).toBe("2026-07-12T10:00:00Z");
+    expect(getCursor("agent-sync-pending", statePath)).toBeUndefined();
+  });
+
+  it("clears the stage file after a successful commit", async () => {
+    freshPaths();
+    stageMemory({ content: "x" }, stageFile);
+    const add = vi.fn().mockResolvedValue({ id: "doc_1", status: "queued" });
+
+    await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+
+    expect(readStaged(stageFile)).toEqual([]);
+  });
+
+  it("is a no-op when nothing is staged", async () => {
+    freshPaths();
+    const add = vi.fn();
+
+    const result = await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+
+    expect(result.committed).toBe(0);
+    expect(add).not.toHaveBeenCalled();
   });
 });

@@ -43,3 +43,9 @@ export function setCursor(source: string, iso: string, statePath?: string): void
   state.cursors[source] = iso;
   writeState(state, statePath);
 }
+
+export function deleteCursor(source: string, statePath?: string): void {
+  const state = readState(statePath);
+  delete state.cursors[source];
+  writeState(state, statePath);
+}

@@ -1,10 +1,16 @@
 /**
  * Sync agent prompt template, per docs/implementation-plan.md §5. Filled with
- * the current cursor and the list of connected Coral sources.
+ * the current cursor and the list of connected Coral sources. An optional
+ * free-text `instruction` (from `curator sync --instruction` / CURATOR_INSTRUCTION)
+ * lets the operator steer what kind of data to pull and prioritize.
  */
-export function buildSyncPrompt(cursor: string, sources: string[]): string {
-  return `You are Curator's sync agent. Your job: pull what changed in connected sources and store ONLY durable, useful memories in Supermemory Local.
+export function buildSyncPrompt(cursor: string, sources: string[], instruction?: string): string {
+  const focus = instruction?.trim()
+    ? `\nFOCUS — the operator specifically wants: ${instruction.trim()}\nPrioritize items matching this focus; when it narrows scope, skip items that fall outside it even if they would otherwise qualify.\n`
+    : "";
 
+  return `You are Curator's sync agent. Your job: pull what changed in connected sources and store ONLY durable, useful memories in Supermemory Local.
+${focus}
 PROTOCOL — follow exactly:
 1. Discover schema with the coral \`list_catalog\` / \`describe_table\` tools (or \`sql\` on coral.tables) for sources: ${sources.join(", ")}.
 2. Fetch changes since ${cursor} with the coral \`sql\` tool. Select minimal columns. LIMIT 50.

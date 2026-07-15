@@ -47,15 +47,47 @@ program
     "--agent <runtime>",
     "Headless agent runtime to drive: claude (Claude Code) or agy (Antigravity CLI). Falls back to CURATOR_AGENT, then claude",
   )
-  .action(async (opts: { raw?: boolean; agent?: string }) => {
+  .option(
+    "--instruction <text>",
+    "Free-text focus for the agent: what kind of data to pull and prioritize. Falls back to CURATOR_INSTRUCTION",
+  )
+  .option(
+    "--review",
+    "Stage the agent's proposed memories for human review instead of writing them; preview, then `curator sync --commit`",
+  )
+  .option("--commit", "Write memories previously staged via --review into Supermemory Local")
+  .action(async (opts: {
+    raw?: boolean;
+    agent?: string;
+    instruction?: string;
+    review?: boolean;
+    commit?: boolean;
+  }) => {
     try {
+      if (opts.commit) {
+        const { runCommit } = await import("./sync/agent.js");
+        await runCommit();
+        return;
+      }
+
       if (opts.raw) {
+        if (opts.review) {
+          throw new Error("--review applies to agentic sync only and can't be combined with --raw.");
+        }
+        if (opts.instruction) {
+          console.warn("--instruction is ignored with --raw (raw sync runs a fixed query).");
+        }
         const { runRawSync } = await import("./sync/raw.js");
         await runRawSync();
-      } else {
-        const { runAgentSync } = await import("./sync/agent.js");
-        await runAgentSync(opts.agent);
+        return;
       }
+
+      const { runAgentSync } = await import("./sync/agent.js");
+      await runAgentSync({
+        runtime: opts.agent,
+        instruction: opts.instruction,
+        review: opts.review,
+      });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
