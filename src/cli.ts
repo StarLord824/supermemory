@@ -27,12 +27,22 @@ program
 
 program
   .command("status")
-  .description("Print resolved (redacted) configuration")
-  .action(() => {
+  .description("Print resolved (redacted) configuration and probe the Supermemory Local server")
+  .action(async () => {
     try {
       const config = resolveConfig();
       console.log(`Supermemory base URL: ${config.baseUrl}`);
       console.log(`API key: ${config.apiKey.slice(0, 4)}${"*".repeat(Math.max(config.apiKey.length - 4, 0))}`);
+
+      const { checkHealth } = await import("./supermemory/ops.js");
+      const health = await checkHealth(config);
+      if (health.reachable) {
+        console.log(`Server: reachable (${health.detail})`);
+      } else {
+        console.log(`Server: NOT reachable — ${health.detail}`);
+        console.log("Is supermemory-server running? (WSL users: see docs/linux-test-checklist.md Part 0)");
+        process.exitCode = 1;
+      }
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;

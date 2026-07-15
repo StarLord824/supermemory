@@ -1,7 +1,8 @@
 # Linux Test Checklist
 
 Everything in this file was **deferred from the Windows blind-build phase** because Supermemory
-Local, Coral, and headless `claude` are unavailable there. Run these in order on the Linux machine.
+Local was unavailable there. (Coral, `claude`, and `agy` have since been verified live on Windows —
+`docs/api-verification.md` §11 — so only the Supermemory-facing steps remain.) Run these in order.
 Each step's pass condition is stated explicitly — do not mark anything done without observing that
 condition. If a step fails or behaves differently than expected, update
 `docs/api-verification.md` (flip STATUS, record the real finding) before moving on — do not
@@ -9,6 +10,50 @@ silently patch around it.
 
 Companion reference for endpoint guesses: `docs/api-verification.md`. Full context: `docs/plan.md`,
 `docs/roadmap.md`, `docs/implementation-plan.md` §1 and §7.
+
+---
+
+## Part 0 — WSL quickstart (running Supermemory Local from the Windows dev machine)
+
+The dev machine already has **WSL2 Ubuntu running** (verified 2026-07-12; Docker Desktop is also
+present as a fallback). WSL2 forwards `localhost`, so a server listening inside Ubuntu is reachable
+from Windows at `http://localhost:6767` — Curator stays on Windows and talks to the WSL server
+directly. This substitutes for the separate Linux device everywhere this checklist says "Linux".
+
+1. **Install inside Ubuntu.** The installer wants an LLM key for the extraction pipeline (any one
+   of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`); export it first so the prompt is
+   skipped. In a WSL shell:
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY / GEMINI_API_KEY
+   curl -fsSL https://supermemory.ai/install | bash
+   ```
+   The installer downloads the matching binary from `supermemoryai/supermemory` GitHub releases,
+   writes `~/.supermemory/env` (inside WSL), and drops a wrapper at
+   `~/.local/bin/supermemory-server`. `SUPERMEMORY_NO_START=1` installs without starting.
+
+2. **Start the server** (WSL shell) and leave it running:
+   ```bash
+   supermemory-server
+   ```
+
+3. **Bridge the credentials to Windows.** The installer wrote `~/.supermemory/env` in the WSL
+   filesystem, but Curator on Windows resolves `~/.supermemory/env` in the *Windows* home dir.
+   Copy it across (Git Bash on Windows):
+   ```bash
+   mkdir -p ~/.supermemory
+   wsl -e bash -lc 'cat ~/.supermemory/env' > ~/.supermemory/env
+   ```
+   ⚠️ While doing this, record the **exact variable names** in the real file into
+   `docs/api-verification.md` "Credentials note" (`SUPERMEMORY_API_KEY` is still a guess). If the
+   names differ, correct `src/config.ts`.
+
+4. **Verify from the Windows side:**
+   ```bash
+   node dist/cli.js status
+   ```
+   Pass: prints the base URL, a redacted key, and `Server: reachable (...)`. This exercises both
+   config resolution and the health probe in one shot. Then continue with Part A below — run it
+   from Windows Git Bash; `localhost:6767` transparently reaches the WSL server.
 
 ---
 

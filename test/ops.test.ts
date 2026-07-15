@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type Supermemory from "supermemory";
 import {
+  checkHealth,
   forgetById,
   forgetByPrompt,
   getProfile,
@@ -175,5 +176,42 @@ describe("raw-fetch ops (profile, forget-matching, review)", () => {
     global.fetch = fetchMock as unknown as typeof fetch;
 
     await expect(getProfile(config)).rejects.toThrow(/500/);
+  });
+
+  it("checkHealth reports reachable on a 200 from /health", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"status":"ok"}',
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const health = await checkHealth(config);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:6767/health");
+    expect(health.reachable).toBe(true);
+    expect(health.detail).toContain("ok");
+  });
+
+  it("checkHealth reports unreachable (without throwing) on connection failure", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
+
+    const health = await checkHealth(config);
+
+    expect(health.reachable).toBe(false);
+    expect(health.detail).toContain("ECONNREFUSED");
+  });
+
+  it("checkHealth reports unreachable on a non-ok status", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () => "not found",
+    }) as unknown as typeof fetch;
+
+    const health = await checkHealth(config);
+
+    expect(health.reachable).toBe(false);
+    expect(health.detail).toContain("404");
   });
 });

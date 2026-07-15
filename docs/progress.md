@@ -29,8 +29,9 @@ end-to-end.
 | `feat: dual agent runtimes (claude -p / agy) + multi-source connect` | `src/sync/agent.ts` extended with an `AgentRuntime` type (`claude` \| `agy`), `buildAgentArgs` centralizing both invocations, `--agent`/`CURATOR_AGENT` selection. `src/connect.ts` extended with `connectSources()` for multi-source `curator connect github linear slack` (sequential, stops at first failure). `buildMcpConfig` now resolves the CLI path to absolute. 10 new tests. |
 | `feat: verified agent runtimes live against coral, claude, and agy` | Coral/claude/agy found installed on Windows after all — whole tooling layer verified live. Corrections: claude dropped `--max-turns` (replaced with `--strict-mcp-config` + server-scoped `--allowedTools`); new `extractAgentText` unwraps claude's JSON `result` envelope; agy has no `--mcp-config`/`--output-format`, so new `writeAgyMcpConfig` merges Curator into `~/.gemini/antigravity-cli/mcp_config.json` (user entries preserved). Both runtimes pulled identical real GitHub PRs via Coral MCP and emitted parseable `CURSOR=` trailers. Curator's MCP passes A1 over real stdio. 6 new tests. |
 | `feat: sync --instruction + human review staging (--review / --commit)` | Operator steering + pre-ingestion governance for agentic sync. `buildSyncPrompt` gains an optional FOCUS block (`--instruction` / `CURATOR_INSTRUCTION`). New `src/sync/staging.ts` (JSONL stage/read/clear); the MCP `remember` tool stages to `~/.curator/staged.jsonl` instead of writing when the spawned agent's mcp-config sets `CURATOR_REMEMBER_MODE=stage` (per-server `env` injection in `buildMcpConfig`, both runtimes). `curator sync --review` clears stale stagings, runs the agent in stage mode, parks the reported cursor as `agent-sync-pending` (live cursor untouched); `curator sync --commit` (`runCommit`) flushes staged memories through `ops.remember`, promotes the pending cursor, clears the stage file. Flag guards: `--review` rejects `--raw`; `--instruction` warned-ignored with `--raw`. **Verified live:** real `claude` + Coral run with an instruction stored exactly 1 scoped memory into the real stage file, skipped 49 out-of-scope PRs, and wrote nothing to Supermemory. 18 new tests. |
+| `feat: status health probe + staged preview + WSL test guide` | Prep for the live-Supermemory phase (server itself deliberately NOT installed yet — user runs that on WSL per the guide). `ops.checkHealth` (3s-timeout GET `/health`, never throws) wired into `curator status`, which now reports `Server: reachable/NOT reachable` and exits 1 when down. Review runs now print each staged memory (customId, tag, content) — no manual JSONL reading. New **Part 0 — WSL quickstart** in `docs/linux-test-checklist.md`: install in WSL2 Ubuntu (verified running on this machine), start server, bridge `~/.supermemory/env` from WSL to the Windows home dir, verify with `curator status`, then run Part A from Windows (WSL2 forwards localhost). 3 new tests. |
 
-**Total: 12 commits, 99 passing tests across 12 test files, clean `tsc --noEmit` and `vite build`.**
+**Total: 13 commits, 102 passing tests across 12 test files, clean `tsc --noEmit` and `vite build`.**
 
 ---
 
@@ -60,7 +61,8 @@ end-to-end.
 
 ## Next step
 
-Get a running `supermemory-server` (Linux box, or Windows if the binary supports it) and run
-`docs/linux-test-checklist.md` Part A steps 1–5 (the Supermemory endpoint probes — steps 6–7 are
-already verified). Corrections land in exactly one file: `src/supermemory/ops.ts`. Then proceed to
-acceptance tests A2 → S1 in order (A1 already passes).
+Follow `docs/linux-test-checklist.md` **Part 0** (WSL quickstart) to install and start
+`supermemory-server` inside WSL2 Ubuntu, bridge the env file to Windows, and confirm with
+`node dist/cli.js status`. Then run Part A steps 1–5 (the Supermemory endpoint probes — steps 6–7
+are already verified). Corrections land in exactly one file: `src/supermemory/ops.ts`. Then proceed
+to acceptance tests A2 → S1 in order (A1 already passes).

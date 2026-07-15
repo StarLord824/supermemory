@@ -312,9 +312,20 @@ export async function runAgentSyncCore(options: RunAgentSyncOptions): Promise<vo
     // are actually flushed.
     const staged = readStaged(stageFile);
     if (newCursor) setCursor(AGENT_SYNC_PENDING_CURSOR_KEY, newCursor, options.statePath);
+
+    if (staged.length > 0) {
+      console.log(`\nStaged for review (${staged.length}):`);
+      for (const [i, item] of staged.entries()) {
+        const tag = item.containerTag ?? "curator_default";
+        console.log(`  ${i + 1}. [${item.customId ?? "no customId"}] (${tag})`);
+        console.log(`     ${item.content}`);
+      }
+    } else {
+      console.log("\nNothing was staged this run.");
+    }
     console.log(
-      `\n${staged.length} memories staged for review at ${stageFile}.` +
-        `\nReview them, then run \`curator sync --commit\` to write them to Supermemory` +
+      `\nStage file: ${stageFile}` +
+        `\nRun \`curator sync --commit\` to write these to Supermemory` +
         `${newCursor ? ` and advance the cursor to ${newCursor}` : ""}.`,
     );
     return;

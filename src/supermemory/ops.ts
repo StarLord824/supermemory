@@ -9,6 +9,28 @@ import type { CuratorConfig } from "../config.js";
  * until confirmed on Linux — see docs/linux-test-checklist.md).
  */
 
+export interface HealthResult {
+  reachable: boolean;
+  detail: string;
+}
+
+// SOURCE: docs/implementation-plan.md §1 step 1 (`curl http://localhost:6767/health`)
+// STATUS: UNVERIFIED — exact health path/response unconfirmed on Local; see docs/api-verification.md
+export async function checkHealth(config: CuratorConfig): Promise<HealthResult> {
+  try {
+    const res = await fetch(`${config.baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    const body = await res.text().catch(() => "");
+    return res.ok
+      ? { reachable: true, detail: body.slice(0, 200) || `HTTP ${res.status}` }
+      : { reachable: false, detail: `HTTP ${res.status} ${body.slice(0, 200)}` };
+  } catch (err) {
+    return {
+      reachable: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export interface RememberInput {
   content: string;
   containerTag?: string;
