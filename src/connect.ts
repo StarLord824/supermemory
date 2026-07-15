@@ -61,4 +61,7 @@ export async function connectSources(
     await connectSource(source, spawnFn);
     console.log(`${source} connected. Add it to CURATOR_SOURCES to include it in \`curator sync\`.`);
   }
+
+  const { formatSuggestions } = await import("./sync/suggestions.js");
+  console.log(`\n${formatSuggestions(sources)}`);
 }

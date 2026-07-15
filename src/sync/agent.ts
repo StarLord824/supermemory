@@ -395,11 +395,19 @@ export interface RunAgentSyncCliOptions {
 /**
  * CLI-facing entry point. Sources come from CURATOR_SOURCES (comma-separated,
  * default "github"); runtime from --agent then CURATOR_AGENT then "claude";
- * instruction from --instruction then CURATOR_INSTRUCTION.
+ * instruction from --instruction then CURATOR_INSTRUCTION. When no
+ * instruction is given, a dimmed suggestion list is shown before the run so
+ * the operator learns the steering vocabulary for next time.
  */
 export async function runAgentSync(options: RunAgentSyncCliOptions = {}): Promise<void> {
   const sources = (process.env.CURATOR_SOURCES ?? "github").split(",").map((s) => s.trim());
   const runtime = resolveAgentRuntime(options.runtime ?? process.env.CURATOR_AGENT);
   const instruction = options.instruction ?? process.env.CURATOR_INSTRUCTION;
+
+  if (!instruction) {
+    const { formatSuggestions } = await import("./suggestions.js");
+    console.log(`${formatSuggestions(sources)}\n`);
+  }
+
   await runAgentSyncCore({ sources, runtime, instruction, review: options.review });
 }
