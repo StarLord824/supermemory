@@ -22,7 +22,9 @@ const DEFAULT_BASE_URL = "http://localhost:6767";
  */
 export function parseEnvFile(contents: string): Record<string, string> {
   const result: Record<string, string> = {};
-  for (const rawLine of contents.split(/\r?\n/)) {
+  // Strip a UTF-8 BOM — PowerShell 5.1's `Out-File -Encoding utf8` writes one,
+  // which would otherwise silently break matching the first key.
+  for (const rawLine of contents.replace(/^﻿/, "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     const eq = line.indexOf("=");

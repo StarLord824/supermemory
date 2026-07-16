@@ -18,6 +18,11 @@ describe("parseEnvFile", () => {
   it("returns an empty object for empty input", () => {
     expect(parseEnvFile("")).toEqual({});
   });
+
+  it("tolerates a UTF-8 BOM (PowerShell Out-File writes one)", () => {
+    const parsed = parseEnvFile("﻿SUPERMEMORY_API_KEY=sm_test_123\n");
+    expect(parsed.SUPERMEMORY_API_KEY).toBe("sm_test_123");
+  });
 });
 
 describe("resolveConfig", () => {
