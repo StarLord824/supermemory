@@ -218,6 +218,30 @@ When live verification on Linux confirms or corrects a path, payload field, or r
 
 ## Credentials note
 
-`~/.supermemory/env` is expected to hold `SUPERMEMORY_API_KEY` (exact variable name **UNVERIFIED —
-confirm by inspecting the real file on Linux**, per `docs/implementation-plan.md` §1 step 2). Never
-print or commit its contents.
+**CORRECTED 2026-07-16 against server-v0.0.5 (running live in WSL2).** Our assumption was wrong on
+two counts:
+
+1. **`~/.supermemory/env` holds the LLM provider key, NOT the Supermemory API key.** The installer
+   writes whichever of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` you picked (used
+   for embeddings/summaries). It does **not** contain a `SUPERMEMORY_API_KEY`. So `config.ts`'s
+   auto-discovery from that file will not find the key it needs.
+2. **The Supermemory API key is auto-generated at first boot**, printed in the startup banner as
+   `sm_<orgid>_<secret>`, and tied to the data dir (org id is embedded in the key, so it's stable
+   as long as the data dir persists). Critically, the server **auto-applies it for unauthenticated
+   localhost requests** — a client on `localhost:6767` that sends *no* Authorization header is
+   accepted.
+
+**Implications for Curator:**
+- To authenticate explicitly, set `SUPERMEMORY_API_KEY=<the printed sm_ key>` (env var, or write it
+  into a `~/.supermemory/env` on the machine running Curator). This is the current documented path.
+- **Zero-config opportunity (follow-up):** because localhost auto-applies the key, Curator targeting
+  `localhost` could skip the key entirely and send unauthenticated requests. That would restore the
+  "zero-config" promise (`docs/plan.md` §3) now that we know the env file lacks the SM key. Requires
+  `config.ts` to allow a missing key when `baseUrl` is localhost, and the SDK/raw-fetch to omit the
+  Authorization header in that case. Not yet built.
+
+The data dir defaults to `./.supermemory/` **relative to the server's cwd** (or `$SUPERMEMORY_DATA_DIR`).
+Starting the server from a different directory creates a different data dir and a different API key —
+keep the launch cwd stable, or set `SUPERMEMORY_DATA_DIR` explicitly.
+
+Never print or commit the key or the env file contents.
