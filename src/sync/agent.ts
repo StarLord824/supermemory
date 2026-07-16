@@ -386,6 +386,12 @@ export interface RunAgentSyncCliOptions {
   runtime?: string;
   instruction?: string;
   review?: boolean;
+  /**
+   * Skip the auto-printed suggestion list. The interactive menu sets this
+   * because it shows suggestions itself, at the useful moment (right before
+   * prompting for an instruction), rather than after the choice is made.
+   */
+  suppressSuggestions?: boolean;
 }
 
 /**
@@ -400,7 +406,7 @@ export async function runAgentSync(options: RunAgentSyncCliOptions = {}): Promis
   const runtime = resolveAgentRuntime(options.runtime ?? process.env.CURATOR_AGENT);
   const instruction = options.instruction ?? process.env.CURATOR_INSTRUCTION;
 
-  if (!instruction) {
+  if (!instruction && !options.suppressSuggestions) {
     const { formatSuggestions } = await import("./suggestions.js");
     console.log(`${formatSuggestions(sources)}\n`);
   }

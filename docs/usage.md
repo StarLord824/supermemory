@@ -52,6 +52,25 @@ Local state (never in the repo):
 | `~/.curator/staged.jsonl` | Memories proposed by a `--review` run, awaiting `--commit` |
 | `~/.gemini/antigravity-cli/mcp_config.json` | agy's own MCP config; Curator merges itself in (your entries preserved) |
 
+## 2b. Interactive mode (run `curator` with no arguments)
+
+Running `curator` with no command launches an arrow-key menu (`@clack/prompts`) covering
+**Status Check, Sync Data, Connect Sources, and Start UI** — it walks you through the same inputs
+the flags take (sync type, agent runtime, instruction, review toggle, port). It's a convenience
+layer over the exact same code the flags call; every flag-based command below still works
+unchanged for scripting and for MCP clients.
+
+Two deliberate exclusions:
+- **"Start MCP Server" is not in the menu.** The stdio MCP transport uses stdout as its JSON-RPC
+  wire, and the menu writes styled banners to stdout — starting the server interactively would
+  corrupt the protocol. MCP servers are spawned by clients via `curator mcp`, never by a human.
+- **Only verified agent runtimes appear** in the runtime picker (`claude`, `agy`) — the same set
+  `--agent` accepts. Nothing speculative is offered.
+
+This adds `@clack/prompts`, `picocolors`, and `gradient-string` — a knowing exception to the
+"plain commander, no CLI framework" guideline in CLAUDE.md, scoped to the interactive entry point
+only; the flag surface stays framework-free.
+
 ## 3. `curator status` — config + server probe
 
 ```bash

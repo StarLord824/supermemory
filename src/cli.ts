@@ -130,4 +130,15 @@ program
     }
   });
 
-program.parseAsync(process.argv);
+if (process.argv.length <= 2) {
+  // Interactive menu only makes sense on a real terminal. In a pipe/CI (no
+  // TTY), a prompt would hang forever with nothing to answer it, so show help.
+  if (process.stdin.isTTY) {
+    const { runInteractiveMenu } = await import("./interactive.js");
+    await runInteractiveMenu();
+  } else {
+    program.help();
+  }
+} else {
+  program.parseAsync(process.argv);
+}

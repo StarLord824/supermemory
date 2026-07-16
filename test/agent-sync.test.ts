@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  AGENT_RUNTIMES,
   buildAgentArgs,
   buildMcpConfig,
   extractAgentText,
@@ -45,6 +46,18 @@ describe("resolveAgentRuntime", () => {
 
   it("rejects unknown runtimes with an actionable error", () => {
     expect(() => resolveAgentRuntime("gemini")).toThrow(/Supported: claude, agy/);
+  });
+
+  // Guard against re-introducing speculative, unverified runtimes. Only
+  // claude and agy have been live-verified (docs/api-verification.md §11);
+  // any new runtime must be added here only after real `<cmd> --help`
+  // verification, not on assumption.
+  it("supports exactly the two verified runtimes", () => {
+    expect([...AGENT_RUNTIMES]).toEqual(["claude", "agy"]);
+  });
+
+  it.each(["kimi", "opencode", "cursor"])("rejects the unverified runtime %s", (name) => {
+    expect(() => resolveAgentRuntime(name)).toThrow(/Supported: claude, agy/);
   });
 });
 
