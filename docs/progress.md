@@ -4,16 +4,20 @@ Snapshot of what's been built since `git init`, for anyone (including future-us)
 mid-stream. Read `docs/context.md` → `docs/plan.md` → `docs/roadmap.md` →
 `docs/implementation-plan.md` for the why/what/when/how; this file is "where are we right now."
 
-**Current status: essentially everything is verified live (2026-07-16).** Coral, claude, and agy
+**Current status: everything that matters is verified live (2026-07-17).** Coral, claude, and agy
 were confirmed on Windows (`docs/api-verification.md` §11); a real `supermemory-server` v0.0.5 was
 installed in WSL2 and `src/supermemory/ops.ts` rewritten against its live OpenAPI contract, dropping
 the hosted-platform `supermemory` npm SDK entirely (§12); the full `remember`→`recall`→`forget`
-loop (dry-run **and** real deletion) was proven through Curator's real MCP server; and the full
-agentic write path — `curator sync --review` → real `claude` + real Coral data → `curator sync
---commit` → real Supermemory writes — was proven end-to-end with 12 real memories from real GitHub
-PRs. One surprise along the way: the review-queue endpoints were wrongly marked "confirmed absent"
-at first — they're real, just undocumented in the server's own spec (lesson recorded in
-`docs/api-verification.md`). See "What's NOT done" below for the handful of remaining checks.
+loop (dry-run **and** real deletion) was proven through Curator's real MCP server; the full agentic
+write path — `curator sync --review` → real `claude` + real Coral data → `curator sync --commit` →
+real Supermemory writes — was proven end-to-end with 12 real memories from real GitHub PRs; and the
+governance console (B1) was walked through in an actual browser — memory browser, review queue, and
+a real preview→confirm→gone deletion, all against the live server. `/v3/connections` was confirmed
+via direct request to genuinely 404, closing Curator's core positioning claim. Two surprises along
+the way, both corrected: the review-queue endpoints were wrongly marked "confirmed absent" at first
+(they're real, just undocumented in the server's own spec), and the server's data directory
+silently consumed a plaintext credentials file that collided with its own path (fixed by using a
+persistent env var instead of a file). See "What's NOT done" for the one remaining minor check.
 
 ---
 
@@ -41,15 +45,16 @@ at first — they're real, just undocumented in the server's own spec (lesson re
 | `fix: sanitize customId to match Supermemory's confirmed character set` | A real agentic sync run (`sync --review --instruction "only merged PRs..."` against real Coral/GitHub data, real `claude`) correctly filtered 50 merged PRs down to 12 durable decisions — but `sync --commit` 400'd live: Supermemory rejects `customId` values containing `/` or `#` (the agent's `owner/repo#number` native-id form). `remember()` now sanitizes any customId defensively; the sync prompt also now tells the agent the allowed character set directly. Also confirms `dryRun:false` deletion live (the one gap left from the previous commit): forgot the A2/A3 test memory for real, verified via `recall` returning empty — **A3 fully closed**. 114 tests (4 new). |
 | `docs: correction — review-queue endpoints are real, not absent` | Retried `sync --commit` after the sanitizer fix: all 12 memories committed, cursor advanced, confirmed recallable (the extraction pipeline split some PRs into multiple atomic memories — 12 stored became 16 total entries). Then, testing the console (B1), `/api/review` unexpectedly returned `supported:true`. Direct verification against port 6767 (bypassing Curator's code) confirmed the server genuinely returns `200 {"memories":[],"total":0}` for `/v3/container-tags/{tag}/inferred` — **this endpoint is real**, despite being absent from the server's own `/v4/openapi` spec. This reverses the earlier "confirmed absent" conclusion and the Phase-0 gate decision: the Review Queue console tab should render (currently empty, since nothing has been passively inferred yet — Curator's `remember` is always explicit). Key lesson recorded in `docs/api-verification.md`: the live spec is not exhaustive — its absence of a path is not proof the path doesn't exist, only a direct request is proof. Same caution now flagged on the still-unverified `/v3/connections` absence claim. |
 | `feat: interactive CLI menu (arrow-key mode when run with no args)` | `src/interactive.ts` — `@clack/prompts` menu covering status/sync/connect/ui, launched when `curator` runs with no arguments (flag surface unchanged). A knowing, scoped exception to CLAUDE.md's "plain commander" rule (documented in `docs/usage.md §2b`). **Reviewed and corrected before landing:** an initial draft had added three speculative agent runtimes (`kimi`/`opencode`/`cursor`) with guessed flags and no verification, and a "Start MCP Server" menu option — both removed. The runtimes violated the project's verify-don't-assume discipline (only `claude`/`agy` are live-verified) and their piped-stdio spawn would hang on any first-run permission prompt; the MCP menu option would corrupt the stdio JSON-RPC wire with clack's stdout banners. Also fixed: suggestion list now shows *before* the instruction prompt (where it's actionable) via a new `suppressSuggestions` flag on `runAgentSync`; consistent cancel handling; port validation; a real (not zero-width) claude gradient. Tests lock `AGENT_RUNTIMES` to exactly `[claude, agy]` and reject the removed names. 6 new tests. |
+| `docs: B1 closed live in-browser + /v3/connections confirmed 404` | Restarted the real server (same data dir, same key, 16 memories persisted correctly across restart — confirms encrypted local storage survives a restart). Hit a real operational gotcha along the way: the server's data directory collided with the path Curator's `config.ts` reads its credentials file from, and the server silently encrypted/consumed the plaintext `env` file it found there. Fixed by using a persistent `SUPERMEMORY_API_KEY` env var (`setx`) instead of a file, sidestepping the collision. Then walked `curator ui` end to end in an actual browser: memory browser showed real synced data under `src_github`; Review Queue rendered its correct empty state (confirms the earlier `supported:true` fix works visually, not just via curl); Forget console preview → confirm → deletion was human-driven and verified gone on reload — **B1 fully closed, not just via MCP tool calls**. Also confirmed via direct authenticated request that `GET /v3/connections` genuinely 404s — **Curator's core positioning claim is now verified, not assumed**. |
 
-**Total: 21 commits, 120 passing tests across 14 test files, clean `tsc --noEmit` and `vite build`.**
+**Total: 22 commits, 120 passing tests across 14 test files, clean `tsc --noEmit` and `vite build`.**
 
 ---
 
 ## What works right now (verified against a real running Supermemory Local server)
 
 - `pnpm build` — compiles the CLI/backend cleanly. `pnpm run build:ui` — builds the console SPA.
-- `pnpm test` — 114 tests green.
+- `pnpm test` — 120 tests green.
 - `node dist/cli.js status` against the real server reports `Server: reachable (HTTP 200)`.
 - **A2/A3 fully closed, live, not mocked:** `remember` stored a fact, the server's extraction
   pipeline distilled and enriched it with inferred `temporalContext`; `recall` found it by semantic
@@ -61,13 +66,15 @@ at first — they're real, just undocumented in the server's own spec (lesson re
   PRs down to 12 durable decisions (38 skipped as routine noise, with reasons), staged them for
   human review. `curator sync --commit` then wrote all 12 to the real server and advanced the
   cursor — this is the project's headline feature, genuinely working end-to-end.
-- **B1 (console), memory-browser half:** `GET /api/memories?tag=src_github` returns all synced
-  memories with correct pagination (16 total — the extraction pipeline split some PR summaries
-  into multiple atomic memories, e.g. one PR became 4).
-- **Review queue is real, not absent** (see the correction two commits up): `GET /api/review`
-  returns `{supported:true, memories:[], total:0}` against the real server — confirmed by a direct
-  request bypassing Curator's own code. The tab should render in the browser (currently empty,
-  since nothing has been passively inferred at low confidence yet).
+- **B1 (console) fully closed, in an actual browser:** memory browser shows real synced data;
+  Review Queue renders (confirmed real, not absent — see below); Forget console's preview → confirm
+  → gone loop was human-driven through the real UI and verified against the live server.
+- **Review queue is real, not absent:** `GET /api/review` returns `{supported:true, memories:[],
+  total:0}` against the real server, confirmed both by direct request and by rendering correctly
+  in the browser (currently empty — nothing has been passively inferred at low confidence yet,
+  since Curator's `remember` calls are always explicit).
+- **`/v3/connections` confirmed to genuinely 404** via a direct authenticated request — Curator's
+  core positioning claim ("Local has no connectors") is verified, not assumed.
 - The MCP server's tool surface is verified via both an in-process handshake and real stdio against
   the real server. The UI backend's routes are verified via real HTTP requests, with `global.fetch`
   mocked only for the outbound Supermemory leg (a routing mock, since both the server's outbound
@@ -76,20 +83,20 @@ at first — they're real, just undocumented in the server's own spec (lesson re
 ## What's NOT done — do not assume these work
 
 - **The review-*action* endpoint** (`POST .../inferred/{id}/review` — approve/decline/undo) has not
-  been called against a real memoryId — no inferred memory exists yet to test against.
-- **B1's forget-console half through the actual browser UI** (type target → preview → confirm →
-  verify gone, via the SPA rather than the MCP tool) has not been walked through yet.
+  been called against a real memoryId — no inferred memory exists yet to test against, since
+  nothing has been passively inferred at low confidence.
 - **C1 (raw-sync idempotency)** was deliberately skipped in favor of proving the write path via the
   agentic flow directly, which is a strictly harder/more complete test that already passed.
-- **`/v3/connections`** is still only presumed absent from hosted-doc guesses — given the
-  review-queue surprise, this should get a direct request before finalizing Curator's "Local has no
-  connectors" positioning claim.
 - The memory-graph embed (`@supermemory/memory-graph`) is deferred — cut line 1, never started.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
+- **Operational note, not a code gap:** if `supermemory-server` is ever launched from a directory
+  Curator also reads credentials from (as happened here — both landed at `~/.supermemory`), the
+  server may treat a plaintext `env` file it finds there as a secret to encrypt. Use a persistent
+  `SUPERMEMORY_API_KEY` env var, not a file in that directory, to avoid the collision.
 
 ## Next step
 
-Walk through B1 in an actual browser (`curator ui`, confirm the Review Queue tab appears and the
-forget-console preview→confirm→gone loop works visually), then a quick direct check of
-`/v3/connections` on port 6767 to finalize the positioning claim. That closes out essentially every
+Essentially done. If more rigor is wanted: test the review-action endpoint once a real inferred
+memory exists, or run C1 (raw-sync idempotency) for completeness — neither blocks anything, since
+the underlying write path is already proven via the agentic flow. That closes out essentially every
 verification item this project has.

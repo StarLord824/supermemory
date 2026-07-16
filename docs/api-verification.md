@@ -132,12 +132,11 @@ If you're reading this to understand what Curator actually calls today, **read �
   hosted-only and is **expected to be unimplemented on the local binary**. Confirming this
   unimplemented status (via a 404/501/not-found response) is itself a Phase-0 deliverable — it lets
   the README state the gap precisely rather than assume it.
-- **STATUS: UNVERIFIED — confirm with a direct request against port 6767**, specifically that it
-  returns *not implemented* rather than silently succeeding. This one matters more than it looks:
-  §7 taught us `/v4/openapi` omits at least one real, working route (`/inferred`), so its absence
-  from that spec is **not** proof `/v3/connections` is unimplemented — only a direct call proves
-  it. This is the one remaining check most worth running before finalizing Curator's positioning
-  claim ("Local has no connectors").
+- **STATUS: CONFIRMED 2026-07-17.** `GET /v3/connections` with a valid Bearer token against the
+  live server returns `404 Not Found`. Given §7 taught us `/v4/openapi`'s silence doesn't prove
+  absence, this was checked with a **direct request** rather than inferred from the spec — genuine
+  confirmation, not assumption. **Curator's core positioning claim ("Local has no connectors") is
+  now verified, not just documented.**
 
 ---
 
@@ -337,10 +336,42 @@ totalPages:2}` — 16 total because the extraction pipeline split some PR summar
 atomic memories, e.g. PR #171 became 4 separate memories). This is B1's memory-browser half,
 genuinely proven.
 
-**Remaining open items:** the review-*action* endpoint (approve/decline/undo, §8) has not been
-called against a real memoryId yet — no inferred memories exist to test against, since nothing
-has been passively inferred at low confidence. B1's forget-console half (preview → confirm →
-verify gone, through the UI) has not been run yet. Acceptance tests C2–S1 otherwise complete.
+**Update 2026-07-17: B1 fully closed, through the actual browser.** With the server restarted
+(same data directory, same key, same 16 memories persisted across restart — confirms the encrypted
+local storage survives a restart correctly) and a real WSL/Windows-collision credentials gotcha
+resolved (see below), walked through `curator ui` in a live browser end to end:
+
+- Memory browser with tag `src_github` showed all 10 (paginated) real synced memories.
+- Review Queue section rendered with its correct empty state ("No inferred memories awaiting
+  review") — confirms the §7 reversal is correct in the actual UI, not just the API.
+- Forget console: typed "AOI upload logo optional" → Preview → Confirm deletion → the two matching
+  PR #171 memories ("refactored the AOI upload logic...", "updated UI labels...") were verified
+  gone from a subsequent reload of the memory browser. **This is a real, human-confirmed deletion
+  through the actual console UI — B1 is now fully proven, not just via curl/MCP tool calls.**
+
+**Also confirmed 2026-07-17: `/v3/connections` genuinely returns `404`** via a direct authenticated
+request (not inferred from the spec, learning from the §7 near-miss). **Curator's core positioning
+claim — "Supermemory Local has no connectors, this is the gap Curator fills" — is now verified,
+not assumed.**
+
+**New operational finding (credentials, not an API contract):** restarting `supermemory-server`
+from the same directory reuses the same data dir and key, as expected — but the plaintext `env`
+file Curator's `config.ts` reads from `~/.supermemory/env` had been consumed: the server appears
+to treat its own data directory's `env` file as a secret to encrypt (`env.enc` appeared, plaintext
+`env` vanished). Since the server's data dir defaults to cwd-relative `./.supermemory/`, and this
+server has always been launched from the Windows home directory (`/mnt/c/Users/MY NOTEBOOK` in
+WSL, which *is* `~` on the Windows side), the server's data directory and Curator's config lookup
+directory are the same path — a real collision, not a hypothetical one. **Recommended fix:**
+don't rely on a Curator-owned `env` file living inside `~/.supermemory` at all; set
+`SUPERMEMORY_API_KEY` as a persistent env var instead (`setx` on Windows), which `config.ts`
+already prefers over the file. Longer-term, launching the server with an explicit
+`SUPERMEMORY_DATA_DIR` outside `~/.supermemory` would remove the collision entirely, but changing
+it now would orphan the existing data directory (and its 16 memories), so this is deferred.
+
+**This closes essentially every acceptance test and positioning claim in the project.** Remaining,
+lower-priority items: the review-*action* endpoint (approve/decline/undo, §8) has not been called
+against a real memoryId (no inferred memory exists yet to test against — nothing has been
+passively inferred at low confidence, since all of Curator's writes are explicit `remember` calls).
 
 ## Isolation policy
 
