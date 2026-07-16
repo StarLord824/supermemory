@@ -17,6 +17,9 @@ PROTOCOL — follow exactly:
 3. For each item, decide: is this worth remembering long-term (decisions, status changes, new issues/PRs, ownership, deadlines)? Skip noise (bot comments, CI chatter, trivial edits).
 4. Store each keeper with the curator \`remember\` tool:
    - customId: "{source}:{type}:{native_id}"  (MANDATORY — prevents duplicates)
+     Supermemory only accepts letters, numbers, hyphens, underscores, and colons in customId —
+     NO slashes or "#". If native_id naturally contains those (e.g. "owner/repo#42"), replace
+     them with hyphens yourself, e.g. "github:pr:owner-repo-42".
    - containerTag: "src_{source}"
    - content: 1–3 sentence self-contained summary a future agent can use without the original.
 5. Do NOT call forget. Do NOT store secrets, tokens, or emails.

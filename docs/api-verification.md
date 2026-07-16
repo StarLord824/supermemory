@@ -266,10 +266,36 @@ Corrections vs. the earlier hosted-doc guesses in §1–§9:
    the one step deliberately not run yet, to avoid mutating state during this verification pass.)
 3. **status**: `curator status` reports `Server: reachable (HTTP 200)` against the real server.
 
-**Remaining open items:** confirming `dryRun:false` deletion end-to-end, the review-queue gate
-decision is now final (unsupported, not just unconfirmed), and acceptance tests C1–S1
-(`docs/implementation-plan.md` §7) involving Coral + agentic sync writing through to this real
-server.
+**Update 2026-07-16 (later same day): `dryRun:false` deletion CONFIRMED live.** Ran `forget` with
+`mode:"prompt"`, target "hackathon deadline", `dryRun:false` against the same memory staged in the
+A2 proof above. Response: `{dryRun:false, count:1, forgetBatchId:"vjEW3xWLvW99YcnSfFuVAM",
+forgotten:[{id, memory, score}]}` — a real `forgetBatchId` was assigned (null on dry-run, per the
+confirmed contract) and the memory was actually removed. Verified via a follow-up `recall` for the
+same query, which returned `{results:[], total:0}`. **Acceptance test A3 is now fully closed** —
+both the dry-run preview and the real deletion are proven against the live server, not mocked.
+
+**Update 2026-07-16 (agentic sync, real run): `customId` character set CONFIRMED via a real 400.**
+Running `curator sync --review --instruction "only merged PRs..."` against real GitHub PR data via
+Coral produced a real agent decision to store 12 memories, correctly summarized and filtered (38 of
+50 merged PRs skipped as routine noise). On `sync --commit`, the first item failed:
+
+```
+POST /v3/documents → 400 {"error":[{"path":["customId"],
+  "message":"Must contain only alphanumeric characters, hyphens, underscores, and colons
+             (no spaces or other special characters)"}]}
+```
+
+The agent's customId was `github:pr:medullabs-code/Medullabs#188` — the `owner/repo#number`
+native-id form contains `/` and `#`, both rejected. **Fixed two ways:** (1) `ops.remember` now
+sanitizes any customId through `sanitizeCustomId()` (replaces disallowed characters with `-`)
+before sending, so one malformed id from an agent, raw-sync mapping, or manual staging can never
+fail an entire batch commit; (2) `src/sync/prompt.ts`'s protocol now explicitly tells the agent the
+allowed character set and to self-sanitize `owner/repo#number`-style ids going forward. Both fixes
+are covered by new tests (`ops.test.ts`, `prompt.test.ts`).
+
+**Remaining open items:** re-running `sync --commit` against the now-fixed sanitizer (should
+succeed against the 12 already-staged, still-valid-content memories), and acceptance tests C2–S1
+(`docs/implementation-plan.md` §7) — the console (B1) in particular — have not been run yet.
 
 ## Isolation policy
 

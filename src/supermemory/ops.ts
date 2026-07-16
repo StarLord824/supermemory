@@ -44,6 +44,21 @@ export interface RememberResult {
   status: string;
 }
 
+const CUSTOM_ID_INVALID_CHARS = /[^a-zA-Z0-9_:-]/g;
+
+/**
+ * Supermemory Local rejects customId values containing anything outside
+ * `[a-zA-Z0-9_:-]` (CONFIRMED live 2026-07-16 — a real sync run produced
+ * `github:pr:medullabs-code/Medullabs#188`, which 400'd on the `/` and `#`).
+ * Sources like GitHub PR/issue identifiers naturally contain `/` and `#`, so
+ * rather than trust every caller (agent prompts, raw sync mapping) to avoid
+ * them, remember() sanitizes defensively here — one bad id from an agent
+ * should never fail a whole batch commit.
+ */
+export function sanitizeCustomId(customId: string): string {
+  return customId.replace(CUSTOM_ID_INVALID_CHARS, "-");
+}
+
 // SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v3/documents
 // (operationId postV3Documents) — CONFIRMED 2026-07-16, exact match to the
 // original hosted-doc guess. See docs/api-verification.md §12.
@@ -56,7 +71,7 @@ export async function remember(
     body: {
       content: input.content,
       containerTag: input.containerTag ?? "curator_default",
-      customId: input.customId,
+      customId: input.customId ? sanitizeCustomId(input.customId) : undefined,
       metadata: input.metadata,
     },
   });

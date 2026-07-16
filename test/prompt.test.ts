@@ -15,6 +15,11 @@ describe("buildSyncPrompt", () => {
     expect(prompt).toContain("Do NOT store secrets, tokens, or emails");
   });
 
+  it("warns against slashes and # in customId (confirmed live: Supermemory 400s on them)", () => {
+    const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"]);
+    expect(prompt).toContain("NO slashes or \"#\"");
+  });
+
   it("instructs the trailing CURSOR= report line", () => {
     const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"]);
     expect(prompt).toContain("CURSOR=<iso>");

@@ -9,6 +9,7 @@ import {
   recall,
   remember,
   reviewInferred,
+  sanitizeCustomId,
 } from "../src/supermemory/ops.js";
 import type { CuratorConfig } from "../src/config.js";
 
@@ -51,6 +52,28 @@ describe("ops (all calls go through rawRequest against confirmed live paths)", (
       expect(JSON.parse(init.body)).toEqual(
         expect.objectContaining({ containerTag: "src_github", customId: "github:issue:42" }),
       );
+    });
+
+    it("sanitizes a customId containing characters Supermemory rejects (confirmed live: / and # 400)", async () => {
+      const fetchMock = mockFetchOnce({ ok: true, status: 200, json: async () => ({ id: "doc_3", status: "queued" }) });
+
+      await remember(config, {
+        content: "x",
+        customId: "github:pr:medullabs-code/Medullabs#188",
+      });
+
+      const [, init] = fetchMock.mock.calls[0];
+      expect(JSON.parse(init.body).customId).toBe("github:pr:medullabs-code-Medullabs-188");
+    });
+  });
+
+  describe("sanitizeCustomId", () => {
+    it("replaces slashes and hashes with hyphens", () => {
+      expect(sanitizeCustomId("github:pr:owner/repo#42")).toBe("github:pr:owner-repo-42");
+    });
+
+    it("leaves already-valid customIds untouched", () => {
+      expect(sanitizeCustomId("github:issue:41")).toBe("github:issue:41");
     });
   });
 
