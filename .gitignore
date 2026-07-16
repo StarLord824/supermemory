@@ -5,3 +5,4 @@ dist/
 .DS_Store
 Thumbs.db
 docs/ll-form.pdf
+bin/

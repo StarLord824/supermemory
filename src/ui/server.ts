@@ -2,9 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import type Supermemory from "supermemory";
 import { resolveConfig, type CuratorConfig } from "../config.js";
-import { createClient } from "../supermemory/client.js";
 import {
   forgetById,
   forgetByPrompt,
@@ -30,7 +28,6 @@ const MIME_TYPES: Record<string, string> = {
 
 export interface UiServerDeps {
   config: CuratorConfig;
-  client: Supermemory;
   /** Directory containing the built SPA (index.html + assets). */
   staticRoot?: string;
 }
@@ -95,7 +92,7 @@ export function createUiRequestHandler(deps: UiServerDeps) {
     try {
       if (req.method === "GET" && url.pathname === "/api/memories") {
         const tag = url.searchParams.get("tag") ?? DEFAULT_CONTAINER_TAG;
-        const result = await listEntriesWithHistory(deps.client, [tag]);
+        const result = await listEntriesWithHistory(deps.config, [tag]);
         return sendJson(res, 200, result);
       }
 
@@ -141,7 +138,7 @@ export function createUiRequestHandler(deps: UiServerDeps) {
               id: target,
             });
           }
-          const result = await forgetById(deps.client, { id: target, containerTag });
+          const result = await forgetById(deps.config, { id: target, containerTag });
           return sendJson(res, 200, result);
         }
 
@@ -164,8 +161,7 @@ export function createUiRequestHandler(deps: UiServerDeps) {
 
 export async function startUiServer(port: number): Promise<void> {
   const config = resolveConfig();
-  const client = createClient(config);
-  const handler = createUiRequestHandler({ config, client, staticRoot: DEFAULT_STATIC_ROOT });
+  const handler = createUiRequestHandler({ config, staticRoot: DEFAULT_STATIC_ROOT });
   const server = createServer((req, res) => {
     void handler(req, res);
   });

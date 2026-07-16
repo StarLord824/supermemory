@@ -58,13 +58,14 @@ Local state (never in the repo):
 curator status
 ```
 
-Prints the resolved base URL, the API key redacted to its first 4 characters, then probes
-`GET /health` with a 3-second timeout:
+Prints the resolved base URL, the API key redacted to its first 4 characters, then probes the
+server root (`GET /`, 3-second timeout — Local has no dedicated `/health` path, confirmed live
+against server-v0.0.5):
 
 ```
 Supermemory base URL: http://localhost:6767
-API key: sm_d****
-Server: reachable ({"status":"ok"})
+API key: sm_b****
+Server: reachable (HTTP 200)
 ```
 
 Exit code 1 (with a pointer to the WSL guide) when the server is down. Use this as the first
@@ -212,23 +213,29 @@ Serves the built SPA plus a JSON API that proxies Supermemory server-side — **
 reaches the browser**.
 
 Panels:
-- **Memory browser** — memories per container tag, `isLatest`/superseded badges, version info
-  where the local API provides it.
+- **Memory browser** — memories per container tag, `isLatest`/superseded badges, and real
+  version-chain relations (`updates`/`extends`/`derives`, confirmed present on Local) where the
+  API returns them.
 - **Forget console** — natural-language target → **always dry-run preview first** → explicit
   "Confirm deletion" → action log. Doubles as the GDPR right-to-be-forgotten story.
-- **Review queue** — approve/decline/undo low-confidence inferred memories. The tab renders
-  **only if** the backend reports the endpoint works on your Local build (`supported:false` →
-  no dead UI).
+- **Review queue** — approve/decline/undo low-confidence inferred memories. **Confirmed absent**
+  from this Local build's live OpenAPI spec (server-v0.0.5) — the tab renders **only if** the
+  backend reports the endpoint works (`supported:false` → no dead UI), which in practice means
+  this tab won't appear at all against this server version.
 
-API routes (all delegating to `src/supermemory/ops.ts`): `GET /api/memories?tag=`,
-`GET /api/review?tag=`, `POST /api/review/:id {action}`, `POST /api/forget {target, mode, dryRun}`
-(dry-run defaults true here too).
+API routes (all delegating to `src/supermemory/ops.ts`): `GET /api/memories?tag=` (proxies
+`POST /v4/memories/list`, response field `memoryEntries`), `GET /api/review?tag=`,
+`POST /api/review/:id {action}`, `POST /api/forget {target, mode, dryRun}` (dry-run defaults true
+here too, overriding the server's own unsafe `false` default).
 
 ## 10. Verification status — read before trusting
 
-Everything Coral-, claude-, and agy-facing is **verified live** (real data pulls through both
-runtimes, real staging, A1 MCP handshake over stdio). Everything Supermemory-facing (endpoint
-paths, payload shapes, `/health`, the env var name in `~/.supermemory/env`) is **best-guess,
-marked UNVERIFIED** in `docs/api-verification.md`, with the exact confirmation steps in
-`docs/linux-test-checklist.md`. All Supermemory calls are confined to `src/supermemory/ops.ts`,
+**Everything is now verified live** against `supermemory-server` v0.0.5 (2026-07-16): Coral,
+claude, and agy (real data pulls through both runtimes, real staging), and the full Supermemory
+contract (`docs/api-verification.md` §12) — confirmed via the server's own live OpenAPI spec
+(`GET /v4/openapi`) plus an end-to-end `remember`→`recall`→`forget`(dry-run) run through Curator's
+real MCP server. `ops.ts` no longer uses the `supermemory` npm SDK (hosted-platform-only) — every
+call is a direct authenticated `fetch` against the confirmed paths. Remaining open items: proving
+`dryRun:false` actually deletes, and running acceptance tests C1–S1 end-to-end with Coral writing
+through to a real server. All Supermemory calls are confined to `src/supermemory/ops.ts`,
 so corrections after live verification are single-file.

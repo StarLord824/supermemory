@@ -19,9 +19,17 @@ export function MemoryBrowser({ tag, memories, loading }: MemoryBrowserProps) {
     <ul data-testid="memory-browser-list">
       {memories.map((memory) => (
         <li key={memory.id} data-testid="memory-entry">
-          {memory.isLatest === false ? <span data-testid="memory-not-latest">superseded</span> : null}
-          <p>{memory.content ?? memory.summary ?? memory.title ?? "(no content)"}</p>
-          {memory.customId ? <code>{memory.customId}</code> : null}
+          {!memory.isLatest ? <span data-testid="memory-not-latest">superseded</span> : null}
+          <p>{memory.memory}</p>
+          {memory.memoryRelations && Object.keys(memory.memoryRelations).length > 0 ? (
+            <ul data-testid="memory-relations">
+              {Object.entries(memory.memoryRelations).map(([relatedId, relation]) => (
+                <li key={relatedId}>
+                  {relation} → {relatedId}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </li>
       ))}
     </ul>

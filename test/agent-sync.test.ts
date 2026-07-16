@@ -3,7 +3,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type Supermemory from "supermemory";
 import {
   buildAgentArgs,
   buildMcpConfig,
@@ -364,9 +363,11 @@ describe("runCommit", () => {
   let tmpDir: string;
   let statePath: string;
   let stageFile: string;
+  const originalFetch = global.fetch;
 
   afterEach(() => {
     if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+    global.fetch = originalFetch;
   });
 
   function freshPaths() {
@@ -375,8 +376,10 @@ describe("runCommit", () => {
     stageFile = join(tmpDir, "staged.jsonl");
   }
 
-  function fakeSmClient(add: ReturnType<typeof vi.fn>): Supermemory {
-    return { documents: { add } } as unknown as Supermemory;
+  function mockRemember() {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: "doc_1", status: "queued" }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return fetchMock;
   }
 
   const config: CuratorConfig = { apiKey: "sm_test_key", baseUrl: "http://localhost:6767" };
@@ -385,22 +388,23 @@ describe("runCommit", () => {
     freshPaths();
     stageMemory({ content: "PR #1 merged", customId: "github:pull:1", containerTag: "src_github" }, stageFile);
     stageMemory({ content: "Issue #2 closed", customId: "github:issue:2" }, stageFile);
-    const add = vi.fn().mockResolvedValue({ id: "doc_1", status: "queued" });
+    const fetchMock = mockRemember();
 
-    const result = await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+    const result = await runCommit({ statePath, stageFile, config });
 
     expect(result.committed).toBe(2);
-    expect(add).toHaveBeenCalledTimes(2);
-    expect(add).toHaveBeenCalledWith(expect.objectContaining({ customId: "github:pull:1" }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ customId: "github:pull:1" }));
   });
 
   it("advances the live cursor to the pending value and clears the pending cursor", async () => {
     freshPaths();
     setCursor("agent-sync-pending", "2026-07-12T10:00:00Z", statePath);
     stageMemory({ content: "x" }, stageFile);
-    const add = vi.fn().mockResolvedValue({ id: "doc_1", status: "queued" });
+    mockRemember();
 
-    await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+    await runCommit({ statePath, stageFile, config });
 
     expect(getCursor("agent-sync", statePath)).toBe("2026-07-12T10:00:00Z");
     expect(getCursor("agent-sync-pending", statePath)).toBeUndefined();
@@ -409,20 +413,21 @@ describe("runCommit", () => {
   it("clears the stage file after a successful commit", async () => {
     freshPaths();
     stageMemory({ content: "x" }, stageFile);
-    const add = vi.fn().mockResolvedValue({ id: "doc_1", status: "queued" });
+    mockRemember();
 
-    await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+    await runCommit({ statePath, stageFile, config });
 
     expect(readStaged(stageFile)).toEqual([]);
   });
 
   it("is a no-op when nothing is staged", async () => {
     freshPaths();
-    const add = vi.fn();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
 
-    const result = await runCommit({ statePath, stageFile, config, client: fakeSmClient(add) });
+    const result = await runCommit({ statePath, stageFile, config });
 
     expect(result.committed).toBe(0);
-    expect(add).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

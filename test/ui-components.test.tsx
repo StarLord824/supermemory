@@ -12,14 +12,15 @@ function loadFixture<T>(name: string): T {
 }
 
 describe("MemoryBrowser", () => {
-  it("renders each memory's content and marks superseded entries", () => {
-    const fixture = loadFixture<{ memories: Array<Record<string, unknown>> }>("memories.json");
+  it("renders each memory's content, relations, and marks superseded entries", () => {
+    const fixture = loadFixture<{ memoryEntries: Array<Record<string, unknown>> }>("memories.json");
     const html = renderToStaticMarkup(
-      <MemoryBrowser tag="curator_default" memories={fixture.memories as never} />,
+      <MemoryBrowser tag="curator_default" memories={fixture.memoryEntries as never} />,
     );
 
     expect(html).toContain("Fix flaky sync test");
-    expect(html).toContain("github:issue:41");
+    expect(html).toContain("updates");
+    expect(html).toContain("mem_3");
     expect(html).toContain("superseded"); // mem_2 has isLatest:false
   });
 

@@ -1,18 +1,20 @@
 {
-  "memories": [
+  "memoryEntries": [
     {
       "id": "mem_1",
-      "content": "[GitHub issue #41] Fix flaky sync test — open\nThe idempotency test occasionally fails on CI.\nhttps://github.com/example/repo/issues/41",
-      "customId": "github:issue:41",
+      "memory": "[GitHub issue #41] Fix flaky sync test — open. The idempotency test occasionally fails on CI.",
       "isLatest": true,
-      "updatedAt": "2026-07-10T12:00:00Z"
+      "isForgotten": false,
+      "updatedAt": "2026-07-10T12:00:00Z",
+      "memoryRelations": null
     },
     {
       "id": "mem_2",
-      "content": "[GitHub issue #42] Add dry-run preview to forget console — closed",
-      "customId": "github:issue:42",
+      "memory": "[GitHub issue #42] Add dry-run preview to forget console — closed",
       "isLatest": false,
-      "updatedAt": "2026-07-11T09:30:00Z"
+      "isForgotten": false,
+      "updatedAt": "2026-07-11T09:30:00Z",
+      "memoryRelations": { "mem_3": "updates" }
     }
   ],
   "pagination": { "currentPage": 1, "totalItems": 2, "totalPages": 1 }

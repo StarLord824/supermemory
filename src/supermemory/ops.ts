@@ -1,12 +1,12 @@
-import type Supermemory from "supermemory";
 import { rawRequest } from "./client.js";
 import type { CuratorConfig } from "../config.js";
 
 /**
  * Every Supermemory Local endpoint Curator depends on is called from exactly
- * this file. See docs/api-verification.md for the source of each path/payload
- * and its verification status (all UNVERIFIED against the real Local binary
- * until confirmed on Linux — see docs/linux-test-checklist.md).
+ * this file, via raw fetch against paths confirmed live on server-v0.0.5's
+ * own OpenAPI spec (`GET /v4/openapi` on the running server) — not the
+ * `supermemory` npm SDK, which targets the hosted platform. See
+ * docs/api-verification.md §12 for the full verified contract of each call.
  */
 
 export interface HealthResult {
@@ -14,15 +14,16 @@ export interface HealthResult {
   detail: string;
 }
 
-// SOURCE: docs/implementation-plan.md §1 step 1 (`curl http://localhost:6767/health`)
-// STATUS: UNVERIFIED — exact health path/response unconfirmed on Local; see docs/api-verification.md
+// SOURCE: live GET / on server-v0.0.5 (2026-07-16) — confirmed 200, serves an
+// HTML landing page. There is no dedicated /health path on Local (confirmed
+// absent from the live OpenAPI spec) — root is the best available liveness
+// signal. See docs/api-verification.md §12.
 export async function checkHealth(config: CuratorConfig): Promise<HealthResult> {
   try {
-    const res = await fetch(`${config.baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
-    const body = await res.text().catch(() => "");
+    const res = await fetch(config.baseUrl, { signal: AbortSignal.timeout(3000) });
     return res.ok
-      ? { reachable: true, detail: body.slice(0, 200) || `HTTP ${res.status}` }
-      : { reachable: false, detail: `HTTP ${res.status} ${body.slice(0, 200)}` };
+      ? { reachable: true, detail: `HTTP ${res.status}` }
+      : { reachable: false, detail: `HTTP ${res.status}` };
   } catch (err) {
     return {
       reachable: false,
@@ -43,19 +44,22 @@ export interface RememberResult {
   status: string;
 }
 
-// SOURCE: node_modules/supermemory/resources/documents.d.ts (client.documents.add)
-// matches docs/plan.md §6 "POST /v3/documents" — STATUS: UNVERIFIED, see docs/api-verification.md §1
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v3/documents
+// (operationId postV3Documents) — CONFIRMED 2026-07-16, exact match to the
+// original hosted-doc guess. See docs/api-verification.md §12.
 export async function remember(
-  client: Supermemory,
+  config: CuratorConfig,
   input: RememberInput,
 ): Promise<RememberResult> {
-  const result = await client.documents.add({
-    content: input.content,
-    containerTag: input.containerTag ?? "curator_default",
-    customId: input.customId,
-    metadata: input.metadata as never,
+  return rawRequest<RememberResult>(config, "/v3/documents", {
+    method: "POST",
+    body: {
+      content: input.content,
+      containerTag: input.containerTag ?? "curator_default",
+      customId: input.customId,
+      metadata: input.metadata,
+    },
   });
-  return { id: result.id, status: result.status };
 }
 
 export interface RecallInput {
@@ -64,28 +68,56 @@ export interface RecallInput {
   limit?: number;
 }
 
-export interface RecallResult {
-  results: Array<{ documentId: string; score: number; title: string | null; content?: string | null }>;
-  total: number;
+export interface RecallResultItem {
+  id: string;
+  memory?: string;
+  chunk?: string;
+  metadata: Record<string, unknown> | null;
+  updatedAt: string;
+  similarity: number;
+  version: number | null;
+  context?: Record<string, unknown>;
 }
 
-// SOURCE: node_modules/supermemory/resources/search.d.ts (client.search.memories)
-// confirms query field name is `q` — STATUS: UNVERIFIED response shape on Local, see docs/api-verification.md §2, §10
-export async function recall(client: Supermemory, input: RecallInput): Promise<RecallResult> {
-  const result = await client.search.memories({
-    q: input.query,
-    containerTag: input.containerTag,
-    limit: input.limit,
-  } as never);
-  return result as unknown as RecallResult;
+export interface RecallResult {
+  results: RecallResultItem[];
+  total: number;
+  timing: number;
+}
+
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v4/search
+// ("Search memory entries - Low latency for conversational", operationId
+// postV4Search) — CONFIRMED 2026-07-16. Corrects the earlier guess: /v3/search
+// is document-chunk search, NOT memory search — /v4/search is the real one.
+// Query field is `q`. See docs/api-verification.md §12.
+export async function recall(config: CuratorConfig, input: RecallInput): Promise<RecallResult> {
+  return rawRequest<RecallResult>(config, "/v4/search", {
+    method: "POST",
+    body: {
+      q: input.query,
+      containerTag: input.containerTag,
+      limit: input.limit,
+    },
+  });
 }
 
 export interface ProfileResult {
-  [key: string]: unknown;
+  profile: {
+    static: string[];
+    dynamic: string[];
+    buckets: Record<string, string[]>;
+  };
+  searchResults?: {
+    results: unknown[];
+    total: number;
+    timing: number;
+  };
 }
 
-// SOURCE: https://supermemory.ai/docs/api-reference/profiles/get-user-profile.md
-// NOT covered by the installed SDK — raw fetch. STATUS: UNVERIFIED, see docs/api-verification.md §3, §10
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v4/profile
+// (operationId postV4Profile) — CONFIRMED 2026-07-16, exact match to the
+// original hosted-doc guess (POST, containerTag required). See
+// docs/api-verification.md §12.
 export async function getProfile(
   config: CuratorConfig,
   containerTag?: string,
@@ -101,18 +133,18 @@ export interface ForgetByIdResult {
   forgotten: boolean;
 }
 
-// SOURCE: node_modules/supermemory/resources/memories.d.ts (client.memories.forget)
-// STATUS: UNVERIFIED, see docs/api-verification.md §5, §10
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path DELETE /v4/memories
+// (operationId deleteV4Memories, "Forget a memory") — CONFIRMED 2026-07-16.
+// Body: {id?, content?, containerTag(required), reason?}. See
+// docs/api-verification.md §12.
 export async function forgetById(
-  client: Supermemory,
+  config: CuratorConfig,
   input: { id: string; containerTag: string; reason?: string },
 ): Promise<ForgetByIdResult> {
-  const result = await client.memories.forget({
-    id: input.id,
-    containerTag: input.containerTag,
-    reason: input.reason,
+  return rawRequest<ForgetByIdResult>(config, "/v4/memories", {
+    method: "DELETE",
+    body: { id: input.id, containerTag: input.containerTag, reason: input.reason },
   });
-  return result as unknown as ForgetByIdResult;
 }
 
 export interface ForgetByPromptInput {
@@ -120,11 +152,17 @@ export interface ForgetByPromptInput {
   containerTag: string;
   /**
    * Curator-level safety default: TRUE unless the caller explicitly passes
-   * false. The server's own documented default is false — Curator never
-   * forwards an absence of this flag as false. See docs/api-verification.md §6.
+   * false. The server's own confirmed default is false — Curator never
+   * forwards an absence of this flag as false. See docs/api-verification.md §12.
    */
   dryRun?: boolean;
   reason?: string;
+}
+
+export interface ForgetCandidate {
+  id: string;
+  memory: string;
+  score: number;
 }
 
 export interface ForgetByPromptResult {
@@ -132,11 +170,15 @@ export interface ForgetByPromptResult {
   count: number;
   forgetBatchId: string | null;
   summary: string;
-  candidates: Array<{ id: string; memory: string; score: number }>;
+  candidates?: ForgetCandidate[];
+  forgotten?: ForgetCandidate[];
 }
 
-// SOURCE: https://supermemory.ai/docs/api-reference/content-management/forget-memories-matching-a-promptquery.md
-// NOT covered by the installed SDK — raw fetch. STATUS: UNVERIFIED, see docs/api-verification.md §6, §10
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path POST
+// /v4/memories/forget-matching (operationId postV4MemoriesForgetMatching) —
+// CONFIRMED 2026-07-16, exact match to the original hosted-doc guess
+// including the unsafe server-side dryRun default of false. See
+// docs/api-verification.md §12.
 export async function forgetByPrompt(
   config: CuratorConfig,
   input: ForgetByPromptInput,
@@ -153,19 +195,68 @@ export async function forgetByPrompt(
   });
 }
 
-export interface ListEntriesWithHistoryResult {
-  memories: Array<Record<string, unknown>>;
-  pagination?: Record<string, unknown>;
+export interface MemoryHistoryEntry {
+  id: string;
+  memory: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  parentMemoryId: string | null;
+  rootMemoryId: string | null;
+  isLatest: boolean;
+  isForgotten: boolean;
 }
 
-// SOURCE: node_modules/supermemory/resources/memories.d.ts (client.memories.list)
-// STATUS: UNVERIFIED whether version-chain fields are present, see docs/api-verification.md §4, §10
+export interface MemoryEntryWithHistory {
+  id: string;
+  memory: string;
+  version: number;
+  isLatest: boolean;
+  isForgotten: boolean;
+  isStatic: boolean;
+  isInference: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+  spaceId: string;
+  orgId: string;
+  sourceCount: number;
+  parentMemoryId: string | null;
+  rootMemoryId: string | null;
+  forgetAfter: string | null;
+  forgetReason: string | null;
+  metadata: Record<string, unknown> | null;
+  /** Relation labels (updates/extends/derives) keyed by related memory id. */
+  memoryRelations: Record<string, "updates" | "extends" | "derives"> | null;
+  temporalContext: Record<string, unknown> | null;
+  history: MemoryHistoryEntry[];
+  documentIds: string[];
+}
+
+export interface ListEntriesWithHistoryResult {
+  memoryEntries: MemoryEntryWithHistory[];
+  pagination: {
+    currentPage: number;
+    totalItems: number;
+    totalPages: number;
+    limit?: number;
+  };
+}
+
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v4/memories/list
+// (operationId postV4MemoriesList, "List memory entries with history") —
+// CONFIRMED 2026-07-16, exact path match to the original guess. CORRECTION:
+// the response key is `memoryEntries`, not `memories` as originally assumed.
+// Version-chain fields (isLatest, isForgotten, memoryRelations with
+// updates/extends/derives, history[]) are all present as hoped. See
+// docs/api-verification.md §12.
 export async function listEntriesWithHistory(
-  client: Supermemory,
+  config: CuratorConfig,
   containerTags: string[],
 ): Promise<ListEntriesWithHistoryResult> {
-  const result = await client.memories.list({ containerTags });
-  return result as unknown as ListEntriesWithHistoryResult;
+  return rawRequest<ListEntriesWithHistoryResult>(config, "/v4/memories/list", {
+    method: "POST",
+    body: { containerTags },
+  });
 }
 
 export interface InferredMemory {
@@ -177,8 +268,12 @@ export interface InferredMemory {
   metadata: Record<string, unknown> | null;
 }
 
-// SOURCE: https://supermemory.ai/docs/memory-review.md
-// NOT covered by the installed SDK — raw fetch. STATUS: UNVERIFIED, see docs/api-verification.md §7, §10
+// SOURCE: https://supermemory.ai/docs/memory-review.md — STATUS: CONFIRMED
+// ABSENT from the live OpenAPI spec on server-v0.0.5 (2026-07-16): no
+// /v3/container-tags/{tag}/inferred path exists. This function will always
+// fail; callers must treat that as "review queue unsupported on Local", which
+// src/ui/server.ts already does (degrades to {supported:false}). See
+// docs/api-verification.md §12 and §7.
 export async function listInferred(
   config: CuratorConfig,
   containerTag: string,
@@ -197,8 +292,9 @@ export interface ReviewInferredResult {
   reviewStatus: "approved" | "declined" | null;
 }
 
-// SOURCE: https://supermemory.ai/docs/memory-review.md
-// NOT covered by the installed SDK — raw fetch. STATUS: UNVERIFIED, see docs/api-verification.md §8, §10
+// SOURCE: https://supermemory.ai/docs/memory-review.md — STATUS: CONFIRMED
+// ABSENT from the live OpenAPI spec on server-v0.0.5, same as listInferred
+// above. See docs/api-verification.md §12 and §8.
 export async function reviewInferred(
   config: CuratorConfig,
   containerTag: string,

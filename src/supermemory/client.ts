@@ -1,15 +1,10 @@
-import Supermemory from "supermemory";
 import type { CuratorConfig } from "../config.js";
 
-export function createClient(config: CuratorConfig): Supermemory {
-  return new Supermemory({ apiKey: config.apiKey, baseURL: config.baseUrl });
-}
-
 /**
- * Thin authenticated fetch for endpoints the `supermemory` SDK does not cover
- * (profile, review/inferred, forget-matching — see docs/api-verification.md §10).
- * Kept here so every raw HTTP call to Supermemory Local is still confined to
- * this folder, alongside the typed SDK client.
+ * Thin authenticated fetch used for every Supermemory Local call. We call the
+ * confirmed paths directly (see docs/api-verification.md §12) rather than
+ * going through the `supermemory` npm SDK, which targets the hosted platform
+ * and was never confirmed to route identically against the local binary.
  */
 export async function rawRequest<T>(
   config: CuratorConfig,

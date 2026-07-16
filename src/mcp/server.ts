@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type Supermemory from "supermemory";
 import type { CuratorConfig } from "../config.js";
 import {
   forgetById,
@@ -34,7 +33,7 @@ function withErrorHandling<T>(fn: () => Promise<T>) {
   });
 }
 
-export function createMcpServer(client: Supermemory, config: CuratorConfig): McpServer {
+export function createMcpServer(config: CuratorConfig): McpServer {
   const server = new McpServer({ name: "curator", version: "0.1.0" });
 
   server.registerTool(
@@ -67,7 +66,7 @@ export function createMcpServer(client: Supermemory, config: CuratorConfig): Mcp
           );
           return Promise.resolve({ staged: true, ...staged });
         }
-        return remember(client, { content, containerTag, customId, metadata });
+        return remember(config, { content, containerTag, customId, metadata });
       }),
   );
 
@@ -89,7 +88,7 @@ export function createMcpServer(client: Supermemory, config: CuratorConfig): Mcp
     },
     async ({ query, containerTag, includeProfile, limit }) =>
       withErrorHandling(async () => {
-        const searchResult = await recall(client, { query, containerTag, limit });
+        const searchResult = await recall(config, { query, containerTag, limit });
         if (!includeProfile) return searchResult;
         const profile = await getProfile(config, containerTag).catch(() => null);
         return { ...searchResult, profile };
@@ -122,7 +121,7 @@ export function createMcpServer(client: Supermemory, config: CuratorConfig): Mcp
           if (dryRun) {
             return { dryRun: true, note: "dryRun:true with mode:'id' previews nothing extra — pass dryRun:false to delete.", id: target };
           }
-          return forgetById(client, { id: target, containerTag: containerTag ?? DEFAULT_CONTAINER_TAG });
+          return forgetById(config, { id: target, containerTag: containerTag ?? DEFAULT_CONTAINER_TAG });
         }
         return forgetByPrompt(config, {
           query: target,

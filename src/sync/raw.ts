@@ -1,8 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type Supermemory from "supermemory";
 import { getCursor, setCursor } from "../state.js";
-import { createClient } from "../supermemory/client.js";
 import { resolveConfig, type CuratorConfig } from "../config.js";
 import { remember } from "../supermemory/ops.js";
 import { mapGithubIssueRow, type GithubIssueRow } from "./mapping.js";
@@ -32,7 +30,6 @@ export interface SyncGithubRawOptions {
   repo: string;
   statePath?: string;
   config?: CuratorConfig;
-  client?: Supermemory;
   fetchRows?: (sqlQuery: string) => Promise<GithubIssueRow[]>;
 }
 
@@ -43,9 +40,9 @@ export interface SyncGithubRawResult {
 
 /**
  * Deterministic, no-agent sync: fixed Coral SQL query -> map -> remember,
- * with customId-based idempotency. Injectable config/client/fetchRows make
- * this fully testable against fixture rows with no live Coral or
- * Supermemory dependency.
+ * with customId-based idempotency. Injectable config/fetchRows make this
+ * fully testable against fixture rows with no live Coral or Supermemory
+ * dependency.
  */
 export async function syncGithubRaw(options: SyncGithubRawOptions): Promise<SyncGithubRawResult> {
   const cursor = getCursor("github", options.statePath) ?? EPOCH;
@@ -54,11 +51,10 @@ export async function syncGithubRaw(options: SyncGithubRawOptions): Promise<Sync
   const rows = await fetchRows(query);
 
   const config = options.config ?? resolveConfig();
-  const client = options.client ?? createClient(config);
 
   let maxUpdatedAt = cursor;
   for (const row of rows) {
-    await remember(client, mapGithubIssueRow(row));
+    await remember(config, mapGithubIssueRow(row));
     if (row.updated_at > maxUpdatedAt) maxUpdatedAt = row.updated_at;
   }
 

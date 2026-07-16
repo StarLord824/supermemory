@@ -1,16 +1,16 @@
 # API Verification — Supermemory Local
 
-**Status of this document: UNVERIFIED.** Written blind on Windows with no access to a running
-`supermemory-server` binary, Coral, or headless `claude`. Every path/payload below was fetched from
-the **hosted** OpenAPI spec (`https://api.supermemory.ai/v3/openapi`) and the hosted docs
-(`https://supermemory.ai/docs/...`) on 2026-07-12. None of it has been confirmed against the
-**local** binary. `docs/plan.md` and `docs/implementation-plan.md` explicitly warn that the local
-binary may differ from what the hosted docs describe — this file exists so that when real
-verification happens (see `docs/linux-test-checklist.md`), corrections land in exactly one place:
-`src/supermemory/ops.ts`.
+**Status: LIVE-VERIFIED as of 2026-07-16** against `supermemory-server` v0.0.5 running in WSL2
+Ubuntu, reached from Windows via `localhost:6767`. See **§12** for the authoritative, confirmed
+contract of every endpoint Curator calls — it supersedes the hosted-doc guesses in §1–§9 below,
+which are kept only for historical context (they were written blind, before any server was
+reachable, per `docs/plan.md`/`docs/implementation-plan.md`'s warning that Local may differ from
+the hosted docs). `src/supermemory/ops.ts` has been rewritten against §12 directly, via raw `fetch`
+against the server's own live OpenAPI spec (`GET /v4/openapi`) — the project no longer imports the
+`supermemory` npm SDK, which targets the hosted platform and was never confirmed to route
+identically against Local.
 
-Do not treat any row below as confirmed working on Local. Treat it as "best available guess, cite
-the source, verify before shipping."
+If you're reading this to understand what Curator actually calls today, **read §12, not §1–§9.**
 
 ---
 
@@ -200,6 +200,76 @@ End-to-end run: identical real PR data + `CURSOR=` trailer via Coral MCP.
 
 **Still open (Linux/live-Supermemory only):** everything in §1–§9, plus the full write path
 (agent → curator `remember` → Supermemory Local) and acceptance tests A2–S1.
+
+**Update 2026-07-16: the item above is now resolved — see §12.**
+
+## 12. Supermemory Local — full contract, LIVE-VERIFIED against server-v0.0.5 (2026-07-16)
+
+Installed and ran real `supermemory-server` v0.0.5 in WSL2 Ubuntu (Gemini API key for
+embeddings/summaries; local `Xenova/bge-base-en-v1.5` embeddings, 768d), reached from Windows over
+`localhost:6767` (WSL2 forwards it transparently). Pulled the server's **own live OpenAPI spec**
+from `GET /v4/openapi` — this is ground truth for *this exact running binary*, not the hosted docs.
+`src/supermemory/ops.ts` was rewritten against this section directly, dropping the `supermemory`
+npm SDK entirely (it targets the hosted platform; nothing confirmed it routes identically on
+Local). Every call below was additionally proven with a real end-to-end run through Curator's own
+MCP server (see the "End-to-end proof" subsection).
+
+### Credentials — corrected understanding
+
+- `~/.supermemory/env` holds the **LLM provider key** (`GEMINI_API_KEY` in this install), not a
+  Supermemory API key. See "Credentials note" below — unchanged from the 2026-07-16 correction.
+- The real Supermemory API key is **auto-generated at first boot** and printed in the startup
+  banner (`sm_<orgid>_<secret>`), tied to the server's data directory (defaults to cwd-relative
+  `./.supermemory/` unless `SUPERMEMORY_DATA_DIR` is set — keep the launch directory stable).
+- The server auto-accepts **unauthenticated** requests on localhost (per its own boot message) —
+  Curator does not currently rely on this and still sends `Authorization: Bearer <key>` on every
+  call, since that's what a non-localhost or multi-key setup would require anyway.
+
+### Endpoint contracts (method, path, request, response — all CONFIRMED)
+
+| Ops function | Method + path | Request body | Response |
+|---|---|---|---|
+| `remember` | `POST /v3/documents` | `{content(required), containerTag?, customId?, metadata?, taskType?, dreaming?}` | `{id, status}` |
+| `recall` | `POST /v4/search` | `{q(required), containerTag?, threshold?(default 0.6), limit?(default 10, max 100), include?, rerank?, aggregate?, searchMode?(default 'memories')}` | `{results:[{id, memory?, chunk?, metadata, updatedAt, similarity, version, context?}], total, timing}` |
+| `getProfile` | `POST /v4/profile` | `{containerTag(required), q?, threshold?, filters?, include?, buckets?}` | `{profile:{static[], dynamic[], buckets:{}}, searchResults?}` |
+| `forgetById` | `DELETE /v4/memories` | `{id?, content?, containerTag(required), reason?}` | `{id, forgotten}` |
+| `forgetByPrompt` | `POST /v4/memories/forget-matching` | `{query(required), containerTag(required), dryRun?(server default **false**), threshold?(default 0.5), maxForget?(default 100, max 500), reason?}` | `{dryRun, count, forgetBatchId, summary, candidates?[]/forgotten?[]}` |
+| `listEntriesWithHistory` | `POST /v4/memories/list` | `{containerTags(required array), filters?, limit?, order?, page?, sort?}` | `{memoryEntries:[...], pagination}` — **field is `memoryEntries`, not `memories`** |
+| `listInferred` / `reviewInferred` | — | — | **Confirmed ABSENT** from the live spec — no `/v3/container-tags/{tag}/inferred` path exists at all. Review queue is unsupported on this Local build; console already degrades to `{supported:false}`. |
+| `checkHealth` | `GET /` (root) | — | 200 HTML landing page. **No dedicated `/health` path exists** (confirmed absent from the spec) — root is the best liveness signal. |
+| — (confirmed absent) | `/v3/connections` family | — | Absent, as expected — this is the gap Curator exists to fill (docs/context.md §3). |
+
+Corrections vs. the earlier hosted-doc guesses in §1–§9:
+- **`/v3/search` is document-chunk search, NOT memory search.** `recall` must use `/v4/search`
+  ("Search memory entries — Low latency for conversational"), which was the original intent.
+- `listEntriesWithHistory`'s response key is **`memoryEntries`**, not `memories` — this was wrong
+  everywhere in the code (`ops.ts`, the console frontend) and has been fixed.
+- Version-chain data is real and rich: each entry has `isLatest`, `isForgotten`, `isStatic`,
+  `isInference`, `memoryRelations` (keyed by related-memory-id → `updates`/`extends`/`derives`),
+  and a full `history[]` array of prior versions. The console can show real relations, not just
+  latest-only.
+- `forgetByPrompt`'s server-side `dryRun` default really is `false` (confirmed) — Curator's
+  MCP/console layers correctly override this to `true` unless the caller explicitly opts out.
+- Two document/memory operations exist that Curator doesn't currently use but are available if
+  needed later: `GET/PATCH/DELETE /v3/documents/{id}` (single-document ops, delete by id or
+  customId) and `POST /v4/memories` (create memories directly, bypassing the extraction pipeline).
+
+### End-to-end proof (via Curator's own MCP server, real stdio, real server)
+
+1. **remember → recall**: stored `"...the hackathon deadline is July 13."` via the `remember` MCP
+   tool. The server's extraction pipeline distilled it to `"The hackathon deadline is July 13."`
+   with `temporalContext.eventDate: ["2025-07-13"]` inferred automatically. `recall` for "hackathon
+   deadline" returned it with `similarity: 0.91`. (This is acceptance test **A2**.)
+2. **forget dry-run**: `forget` with `mode:"prompt"`, target "hackathon deadline", default
+   `dryRun` → returned `dryRun:true`, the correct candidate with a similarity score, zero deletion.
+   (This is acceptance test **A3**'s preview half — confirming `dryRun:false` actually deletes is
+   the one step deliberately not run yet, to avoid mutating state during this verification pass.)
+3. **status**: `curator status` reports `Server: reachable (HTTP 200)` against the real server.
+
+**Remaining open items:** confirming `dryRun:false` deletion end-to-end, the review-queue gate
+decision is now final (unsupported, not just unconfirmed), and acceptance tests C1–S1
+(`docs/implementation-plan.md` §7) involving Coral + agentic sync writing through to this real
+server.
 
 ## Isolation policy
 

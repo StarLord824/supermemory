@@ -2,9 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import type Supermemory from "supermemory";
 import { resolveConfig, type CuratorConfig } from "../config.js";
-import { createClient } from "../supermemory/client.js";
 import { remember } from "../supermemory/ops.js";
 import { deleteCursor, getCursor, setCursor } from "../state.js";
 import { buildSyncPrompt, parseCursorFromOutput } from "./prompt.js";
@@ -342,7 +340,6 @@ export interface RunCommitOptions {
   statePath?: string;
   stageFile?: string;
   config?: CuratorConfig;
-  client?: Supermemory;
 }
 
 /**
@@ -361,10 +358,9 @@ export async function runCommit(options: RunCommitOptions = {}): Promise<{ commi
   }
 
   const config = options.config ?? resolveConfig();
-  const client = options.client ?? createClient(config);
 
   for (const item of staged) {
-    await remember(client, {
+    await remember(config, {
       content: item.content,
       containerTag: item.containerTag,
       customId: item.customId,

@@ -1,15 +1,15 @@
 export interface MemoryEntry {
   id: string;
-  content?: string | null;
-  summary?: string | null;
-  title?: string | null;
-  customId?: string | null;
-  isLatest?: boolean;
-  updatedAt?: string;
+  memory: string;
+  isLatest: boolean;
+  isForgotten: boolean;
+  updatedAt: string;
+  /** Relation labels (updates/extends/derives) keyed by related memory id. */
+  memoryRelations: Record<string, "updates" | "extends" | "derives"> | null;
 }
 
 export interface MemoriesResponse {
-  memories: MemoryEntry[];
+  memoryEntries: MemoryEntry[];
   pagination?: Record<string, unknown>;
 }
 

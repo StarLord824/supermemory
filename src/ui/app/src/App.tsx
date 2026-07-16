@@ -31,7 +31,7 @@ export function App() {
   useEffect(() => {
     setLoadingMemories(true);
     fetchMemories(tag)
-      .then((res) => setMemories(res.memories))
+      .then((res) => setMemories(res.memoryEntries))
       .catch(() => setMemories([]))
       .finally(() => setLoadingMemories(false));
 

@@ -2,7 +2,6 @@
 import { Command } from "commander";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolveConfig } from "./config.js";
-import { createClient } from "./supermemory/client.js";
 import { createMcpServer } from "./mcp/server.js";
 
 const program = new Command();
@@ -15,8 +14,7 @@ program
   .action(async () => {
     try {
       const config = resolveConfig();
-      const client = createClient(config);
-      const server = createMcpServer(client, config);
+      const server = createMcpServer(config);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     } catch (err) {
