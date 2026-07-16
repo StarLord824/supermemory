@@ -30,8 +30,24 @@ Resolution order for Supermemory credentials (see `src/config.ts`):
 
 | Setting | 1st: env var | 2nd: file | Default |
 |---|---|---|---|
-| API key | `SUPERMEMORY_API_KEY` | `~/.supermemory/env` | — (required; actionable error if missing) |
+| API key | `SUPERMEMORY_API_KEY` | `~/.supermemory/env` | none needed on localhost — see below |
 | Base URL | `SUPERMEMORY_BASE_URL` | `~/.supermemory/env` | `http://localhost:6767` |
+
+**Genuinely zero-config on localhost.** If no API key is found anywhere and `baseUrl` resolves to
+`localhost` / `127.0.0.1` / `[::1]` (a strict hostname match, never a substring — `localhost.evil.com`
+does not qualify), Curator sends requests with no `Authorization` header at all. This isn't a
+convenient assumption: Supermemory Local's own boot banner states unauthenticated localhost
+requests are auto-applied its key, and this was verified with a real unauthenticated request
+before any code was written. Confirmed end-to-end afterward too, in a shell with no
+`SUPERMEMORY_API_KEY` set anywhere: `curator status` and a full `remember`→`recall` round trip both
+succeeded against the real server. For any non-localhost `baseUrl` (or if you just prefer an
+explicit key), set `SUPERMEMORY_API_KEY` — resolution throws an actionable error only in that case.
+
+⚠️ **Don't place a `SUPERMEMORY_API_KEY=...` file at `~/.supermemory/env`** if you're also running
+`supermemory-server` with its data directory at that same path (e.g. launched from your home
+directory) — the server may treat a plaintext `env` file it finds there as a secret to encrypt,
+silently consuming it. Prefer setting the env var directly (`setx SUPERMEMORY_API_KEY ...` on
+Windows) — which, per the above, usually isn't necessary on localhost anyway.
 
 Curator's own knobs:
 

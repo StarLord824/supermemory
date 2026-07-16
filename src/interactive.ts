@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import gradient from "gradient-string";
 
-import { resolveConfig } from "./config.js";
+import { describeApiKey, resolveConfig } from "./config.js";
 import { runAgentSync, AGENT_RUNTIMES } from "./sync/agent.js";
 import { runRawSync } from "./sync/raw.js";
 import { connectSources } from "./connect.js";
@@ -58,7 +58,7 @@ export async function runInteractiveMenu(): Promise<void> {
       case "status": {
         const config = resolveConfig();
         const health = await checkHealth(config);
-        const redacted = `${config.apiKey.slice(0, 4)}${"*".repeat(Math.max(config.apiKey.length - 4, 0))}`;
+        const redacted = describeApiKey(config.apiKey);
         const lines = [
           `Supermemory base URL: ${pc.cyan(config.baseUrl)}`,
           `API key: ${pc.cyan(redacted)}`,

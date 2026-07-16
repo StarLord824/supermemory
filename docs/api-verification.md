@@ -404,13 +404,24 @@ two counts:
    accepted.
 
 **Implications for Curator:**
-- To authenticate explicitly, set `SUPERMEMORY_API_KEY=<the printed sm_ key>` (env var, or write it
-  into a `~/.supermemory/env` on the machine running Curator). This is the current documented path.
-- **Zero-config opportunity (follow-up):** because localhost auto-applies the key, Curator targeting
-  `localhost` could skip the key entirely and send unauthenticated requests. That would restore the
-  "zero-config" promise (`docs/plan.md` §3) now that we know the env file lacks the SM key. Requires
-  `config.ts` to allow a missing key when `baseUrl` is localhost, and the SDK/raw-fetch to omit the
-  Authorization header in that case. Not yet built.
+- To authenticate explicitly (non-localhost `baseUrl`, or if you just prefer an explicit key), set
+  `SUPERMEMORY_API_KEY=<the printed sm_ key>` (env var, or write it into `~/.supermemory/env`).
+- **Zero-config: BUILT and VERIFIED live 2026-07-17.** Before writing any code, the auto-auth claim
+  was checked directly rather than assumed: `POST /v4/profile` with **no** `Authorization` header
+  at all, against `http://localhost:6767`, returned a real `200` with correct data. This matches the
+  server's own boot-banner self-description ("the api key above is auto-applied for unauthenticated
+  localhost requests") and is reproducible, not a fluke — genuine intended behavior, not an
+  oversight to lean on. `config.ts`'s `resolveConfig` now returns `apiKey: undefined` (instead of
+  throwing) when no key is found **and** `baseUrl` resolves to a strict localhost hostname
+  (`isLocalhost()` — exact match on `localhost` / `127.0.0.1` / `[::1]` via `new URL().hostname`,
+  never a substring check, so `localhost.evil.com` or a LAN IP never qualifies). `client.ts`'s
+  `rawRequest` omits the `Authorization` header entirely when `apiKey` is unset, rather than
+  sending `Bearer undefined`. **Re-verified end-to-end after the code change**, in a shell with
+  zero `SUPERMEMORY_API_KEY` set anywhere (no env var, no file): `curator status` reported
+  `Server: reachable`, and a full `remember` → `recall` round-trip through the real MCP server
+  against the real running binary succeeded with no credentials configured at all. The original
+  "zero-config, no secrets to paste" promise (`docs/plan.md` §3) is now actually true for the
+  localhost case, which is the default and by far the common one.
 
 The data dir defaults to `./.supermemory/` **relative to the server's cwd** (or `$SUPERMEMORY_DATA_DIR`).
 Starting the server from a different directory creates a different data dir and a different API key —

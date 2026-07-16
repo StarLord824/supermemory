@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { resolveConfig } from "./config.js";
+import { describeApiKey, resolveConfig } from "./config.js";
 import { createMcpServer } from "./mcp/server.js";
 
 const program = new Command();
@@ -30,7 +30,7 @@ program
     try {
       const config = resolveConfig();
       console.log(`Supermemory base URL: ${config.baseUrl}`);
-      console.log(`API key: ${config.apiKey.slice(0, 4)}${"*".repeat(Math.max(config.apiKey.length - 4, 0))}`);
+      console.log(`API key: ${describeApiKey(config.apiKey)}`);
 
       const { checkHealth } = await import("./supermemory/ops.js");
       const health = await checkHealth(config);

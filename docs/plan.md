@@ -28,7 +28,7 @@ Curator is one CLI/daemon with three faces. The argument that unifies them: **ag
 
 A purpose-built stdio MCP server that targets `localhost:6767` directly. Differentiators over the official hosted server and the minimal community rewrite (see §7):
 
-- **Zero-config auto-discovery:** reads the API key and URL from `~/.supermemory/env` (written by the Supermemory installer), so setup is a single MCP config entry with no secrets to paste.
+- **Zero-config on localhost:** no API key needs to be found or pasted at all — Supermemory Local auto-authorizes unauthenticated requests from localhost (verified live, see `docs/api-verification.md` §13), so Curator simply omits the Authorization header when targeting `localhost`/`127.0.0.1`. (Earlier drafts of this plan assumed the key could be auto-discovered from `~/.supermemory/env`; live testing found that file holds the LLM provider key, not a Supermemory key, and the real Supermemory key is generated at server boot with no file to read it from — the localhost-skip approach is what actually delivers on "no secrets to paste.") For a non-localhost `baseUrl`, set `SUPERMEMORY_API_KEY` explicitly.
 - **Tools:** `remember` (store, with optional `containerTag` and `customId`), `recall` (hybrid search, optional profile inclusion), `forget` (single memory or agentic prompt-based mass-forget, always with `dryRun` preview support), `get_profile` (user/context profile).
 - **Project scoping** via container tags so one local server cleanly serves work, personal, and per-repo memory spaces.
 - Works in Claude Desktop, Cursor, and Windsurf — clients that have no official Supermemory plugin (the plugins cover only Claude Code, Codex, and OpenCode).

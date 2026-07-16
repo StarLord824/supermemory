@@ -11,12 +11,18 @@ export async function rawRequest<T>(
   path: string,
   init: { method: string; body?: unknown },
 ): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // config.apiKey is only ever undefined when resolveConfig determined
+  // baseUrl is strict localhost, which accepts unauthenticated requests
+  // (confirmed live — see config.ts isLocalhost). Omit the header entirely
+  // rather than send "Bearer undefined".
+  if (config.apiKey) {
+    headers.Authorization = `Bearer ${config.apiKey}`;
+  }
+
   const res = await fetch(`${config.baseUrl}${path}`, {
     method: init.method,
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
 
