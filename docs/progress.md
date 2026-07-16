@@ -4,15 +4,16 @@ Snapshot of what's been built since `git init`, for anyone (including future-us)
 mid-stream. Read `docs/context.md` → `docs/plan.md` → `docs/roadmap.md` →
 `docs/implementation-plan.md` for the why/what/when/how; this file is "where are we right now."
 
-**Current status: EVERYTHING is now verified live (2026-07-16).** Coral, claude, and agy were
-confirmed on Windows (see `docs/api-verification.md` §11), the instruction/review-staging layer was
-proven end-to-end, and — the last open question — a real `supermemory-server` v0.0.5 was installed
-in WSL2, its actual live OpenAPI spec was pulled, `src/supermemory/ops.ts` was rewritten against the
-confirmed contract (dropping the hosted-platform `supermemory` npm SDK entirely), and the full
-`remember`→`recall`→`forget`(dry-run) loop was proven through Curator's real MCP server against the
-real running binary. See `docs/api-verification.md` §12 for the full contract and "What's NOT done"
-below for the few remaining gaps (mainly: proving an actual deletion, and Coral→agent→Supermemory
-end-to-end).
+**Current status: essentially everything is verified live (2026-07-16).** Coral, claude, and agy
+were confirmed on Windows (`docs/api-verification.md` §11); a real `supermemory-server` v0.0.5 was
+installed in WSL2 and `src/supermemory/ops.ts` rewritten against its live OpenAPI contract, dropping
+the hosted-platform `supermemory` npm SDK entirely (§12); the full `remember`→`recall`→`forget`
+loop (dry-run **and** real deletion) was proven through Curator's real MCP server; and the full
+agentic write path — `curator sync --review` → real `claude` + real Coral data → `curator sync
+--commit` → real Supermemory writes — was proven end-to-end with 12 real memories from real GitHub
+PRs. One surprise along the way: the review-queue endpoints were wrongly marked "confirmed absent"
+at first — they're real, just undocumented in the server's own spec (lesson recorded in
+`docs/api-verification.md`). See "What's NOT done" below for the handful of remaining checks.
 
 ---
 
@@ -35,46 +36,59 @@ end-to-end).
 | `feat: status health probe + staged preview + WSL test guide` | Prep for the live-Supermemory phase (server itself deliberately NOT installed yet — user runs that on WSL per the guide). `ops.checkHealth` (3s-timeout GET `/health`, never throws) wired into `curator status`, which now reports `Server: reachable/NOT reachable` and exits 1 when down. Review runs now print each staged memory (customId, tag, content) — no manual JSONL reading. New **Part 0 — WSL quickstart** in `docs/linux-test-checklist.md`: install in WSL2 Ubuntu (verified running on this machine), start server, bridge `~/.supermemory/env` from WSL to the Windows home dir, verify with `curator status`, then run Part A from Windows (WSL2 forwards localhost). 3 new tests. |
 | `feat: suggestion layer + docs/usage.md feature guide` | New `src/sync/suggestions.ts`: curated per-source instruction suggestions (github/linear/slack/sentry/datadog/stripe + generic fallback), rendered as a dimmed ("translucent") ANSI block before any agentic sync run without `--instruction` and after `curator connect`. Deliberately hardcoded, not live-generated (deterministic-before-agentic); `getSuggestions()` is the single upgrade point for catalog-derived or LLM-generated tiers later. Plus `docs/usage.md`: the full feature & usage reference — config resolution, state files, every command and flag, MCP tool table, review workflow, runtime differences, verification-status pointers. 7 new tests. |
 | `fix: utf-8 BOM tolerance in ~/.supermemory/env` | `parseEnvFile` strips a leading UTF-8 BOM, which PowerShell 5.1's `Out-File -Encoding utf8` writes — would otherwise silently break key matching for anyone bridging the env file from PowerShell. 1 new test. |
-| `feat: rewrite ops.ts against the real Supermemory Local server` | Installed real `supermemory-server` v0.0.5 in WSL2, pulled its own live OpenAPI spec (`GET /v4/openapi`), and rewrote `src/supermemory/ops.ts` against the confirmed contract — dropping the `supermemory` npm SDK entirely (hosted-platform-only, never confirmed to route the same on Local) in favor of direct authenticated `fetch`. Corrections: `/v3/search` is document search, not memory search — `recall` now correctly targets `/v4/search`; `listEntriesWithHistory`'s response key is `memoryEntries`, not `memories` (fixed in `ops.ts` and the console frontend); `checkHealth` now probes `GET /` since Local has no dedicated `/health` path. Confirmed real: version-chain fields (`isLatest`, `memoryRelations` with updates/extends/derives, `history[]`), `forgetByPrompt`'s unsafe server-side `dryRun:false` default, and that the review-queue endpoints are genuinely absent from this server build. `createMcpServer`, `syncGithubRaw`, `runCommit`, and the UI server all simplified to take `config` only (no more SDK client param) — a client-carrying param is no longer needed anywhere. **Verified fully live end-to-end** through Curator's real MCP server against the real running binary: `remember` → server auto-extracted a clean sentence with inferred `temporalContext` → `recall` found it with a similarity score (acceptance test A2); `forget` with `mode:prompt` defaulted to `dryRun:true` and returned the correct candidate with zero deletion (A3 preview half). All 6 affected test files rewritten to mock `global.fetch` directly. 110 tests passing (net delta reflects rewritten, not just added, tests). |
+| `feat: rewrite ops.ts against the real Supermemory Local server` | Installed real `supermemory-server` v0.0.5 in WSL2, pulled its own live OpenAPI spec (`GET /v4/openapi`), and rewrote `src/supermemory/ops.ts` against the confirmed contract — dropping the `supermemory` npm SDK entirely (hosted-platform-only, never confirmed to route the same on Local) in favor of direct authenticated `fetch`. Corrections: `/v3/search` is document search, not memory search — `recall` now correctly targets `/v4/search`; `listEntriesWithHistory`'s response key is `memoryEntries`, not `memories` (fixed in `ops.ts` and the console frontend); `checkHealth` now probes `GET /` since Local has no dedicated `/health` path. Confirmed real: version-chain fields (`isLatest`, `memoryRelations` with updates/extends/derives, `history[]`) and `forgetByPrompt`'s unsafe server-side `dryRun:false` default. (Note: this commit's conclusion that the review-queue endpoints are absent was later found WRONG — see the correction two rows below.) `createMcpServer`, `syncGithubRaw`, `runCommit`, and the UI server all simplified to take `config` only (no more SDK client param) — a client-carrying param is no longer needed anywhere. **Verified fully live end-to-end** through Curator's real MCP server against the real running binary: `remember` → server auto-extracted a clean sentence with inferred `temporalContext` → `recall` found it with a similarity score (acceptance test A2); `forget` with `mode:prompt` defaulted to `dryRun:true` and returned the correct candidate with zero deletion (A3 preview half). All 6 affected test files rewritten to mock `global.fetch` directly. 110 tests passing (net delta reflects rewritten, not just added, tests). |
 
-**Total: 19 commits, 110 passing tests across 13 test files, clean `tsc --noEmit` and `vite build`.**
+| `fix: sanitize customId to match Supermemory's confirmed character set` | A real agentic sync run (`sync --review --instruction "only merged PRs..."` against real Coral/GitHub data, real `claude`) correctly filtered 50 merged PRs down to 12 durable decisions — but `sync --commit` 400'd live: Supermemory rejects `customId` values containing `/` or `#` (the agent's `owner/repo#number` native-id form). `remember()` now sanitizes any customId defensively; the sync prompt also now tells the agent the allowed character set directly. Also confirms `dryRun:false` deletion live (the one gap left from the previous commit): forgot the A2/A3 test memory for real, verified via `recall` returning empty — **A3 fully closed**. 114 tests (4 new). |
+| `docs: correction — review-queue endpoints are real, not absent` | Retried `sync --commit` after the sanitizer fix: all 12 memories committed, cursor advanced, confirmed recallable (the extraction pipeline split some PRs into multiple atomic memories — 12 stored became 16 total entries). Then, testing the console (B1), `/api/review` unexpectedly returned `supported:true`. Direct verification against port 6767 (bypassing Curator's code) confirmed the server genuinely returns `200 {"memories":[],"total":0}` for `/v3/container-tags/{tag}/inferred` — **this endpoint is real**, despite being absent from the server's own `/v4/openapi` spec. This reverses the earlier "confirmed absent" conclusion and the Phase-0 gate decision: the Review Queue console tab should render (currently empty, since nothing has been passively inferred yet — Curator's `remember` is always explicit). Key lesson recorded in `docs/api-verification.md`: the live spec is not exhaustive — its absence of a path is not proof the path doesn't exist, only a direct request is proof. Same caution now flagged on the still-unverified `/v3/connections` absence claim. |
+
+**Total: 20 commits, 114 passing tests across 13 test files, clean `tsc --noEmit` and `vite build`.**
 
 ---
 
 ## What works right now (verified against a real running Supermemory Local server)
 
-- `pnpm build` — compiles the CLI/backend cleanly.
-- `pnpm run build:ui` — builds the console SPA into `dist/ui/app`.
-- `pnpm test` — 110 tests green.
-- `node dist/cli.js --help` / `status` / `mcp` / `sync --raw` / `sync --agent <bad>` / `sync --raw --review` / `connect --help` — all fail or succeed with clean, actionable one-line messages, never a raw stack trace.
+- `pnpm build` — compiles the CLI/backend cleanly. `pnpm run build:ui` — builds the console SPA.
+- `pnpm test` — 114 tests green.
 - `node dist/cli.js status` against the real server reports `Server: reachable (HTTP 200)`.
-- **Live end-to-end proof through Curator's real MCP server**: `remember` stored a fact, the real
-  server's extraction pipeline distilled and enriched it (inferred `temporalContext`), `recall`
-  found it by semantic search with a similarity score, and `forget` (mode:prompt) correctly
-  defaulted to a dry-run preview of the right candidate with zero deletion. This is acceptance
-  tests A2 and A3's preview half, genuinely passing — not mocked.
-- The full review loop minus the final write: `curator sync --review --instruction "<focus>"` runs a real agent against real Coral data, stages scoped proposals to `~/.curator/staged.jsonl`, and leaves the live cursor untouched.
-- The MCP server's tool surface (4 tools, dry-run-by-default forget) is verified via a real in-process MCP handshake AND real stdio against the real server.
-- The UI backend's routes are verified via real HTTP requests against an ephemeral port, with `global.fetch` mocked only for the outbound Supermemory leg.
-- The console components render correctly against fixture data shaped like the now-confirmed API responses.
+- **A2/A3 fully closed, live, not mocked:** `remember` stored a fact, the server's extraction
+  pipeline distilled and enriched it with inferred `temporalContext`; `recall` found it by semantic
+  search with a similarity score; `forget` dry-run previewed the right candidate with zero
+  deletion; `forget` with `dryRun:false` then actually deleted it (real `forgetBatchId`), confirmed
+  gone via a follow-up `recall` returning empty.
+- **The full agentic write path, live, real data:** `curator sync --review --instruction "only
+  merged PRs..."` ran real `claude` against real Coral/GitHub PR data, correctly filtered 50 merged
+  PRs down to 12 durable decisions (38 skipped as routine noise, with reasons), staged them for
+  human review. `curator sync --commit` then wrote all 12 to the real server and advanced the
+  cursor — this is the project's headline feature, genuinely working end-to-end.
+- **B1 (console), memory-browser half:** `GET /api/memories?tag=src_github` returns all synced
+  memories with correct pagination (16 total — the extraction pipeline split some PR summaries
+  into multiple atomic memories, e.g. one PR became 4).
+- **Review queue is real, not absent** (see the correction two commits up): `GET /api/review`
+  returns `{supported:true, memories:[], total:0}` against the real server — confirmed by a direct
+  request bypassing Curator's own code. The tab should render in the browser (currently empty,
+  since nothing has been passively inferred at low confidence yet).
+- The MCP server's tool surface is verified via both an in-process handshake and real stdio against
+  the real server. The UI backend's routes are verified via real HTTP requests, with `global.fetch`
+  mocked only for the outbound Supermemory leg (a routing mock, since both the server's outbound
+  calls and the test's inbound requests share `global.fetch` now that there's no SDK layer).
 
 ## What's NOT done — do not assume these work
 
-- **`dryRun:false` actually deleting a memory** has not been run yet (deliberately, to avoid
-  mutating state mid-verification) — the dry-run preview path is proven, the real-delete path
-  is architecturally identical but unexercised.
-- Acceptance tests C1–S1 (`docs/implementation-plan.md` §7) — Coral writing through an agent into
-  this real Supermemory server end-to-end — have not been run. A1–A3(preview) have passed.
-- The review-queue console tab: confirmed **absent** from this Local build (not just unconfirmed)
-  — `/v3/container-tags/{tag}/inferred` does not exist in the server's live OpenAPI spec. The
-  console's `{supported:false}` fallback means this tab simply won't appear; that's correct
-  behavior, not a bug to fix.
+- **The review-*action* endpoint** (`POST .../inferred/{id}/review` — approve/decline/undo) has not
+  been called against a real memoryId — no inferred memory exists yet to test against.
+- **B1's forget-console half through the actual browser UI** (type target → preview → confirm →
+  verify gone, via the SPA rather than the MCP tool) has not been walked through yet.
+- **C1 (raw-sync idempotency)** was deliberately skipped in favor of proving the write path via the
+  agentic flow directly, which is a strictly harder/more complete test that already passed.
+- **`/v3/connections`** is still only presumed absent from hosted-doc guesses — given the
+  review-queue surprise, this should get a direct request before finalizing Curator's "Local has no
+  connectors" positioning claim.
 - The memory-graph embed (`@supermemory/memory-graph`) is deferred — cut line 1, never started.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
 
 ## Next step
 
-Run acceptance tests C1 → S1 in order (`docs/implementation-plan.md` §7): `curator sync --raw`
-twice for idempotency (C1) against the real server, then a real GitHub issue → sync → recall (C2),
-then the console loop (B1) and confirmed deletion via `dryRun:false`. Everything needed —
-credentials, a running server, and correct endpoint contracts — is now in place.
+Walk through B1 in an actual browser (`curator ui`, confirm the Review Queue tab appears and the
+forget-console preview→confirm→gone loop works visually), then a quick direct check of
+`/v3/connections` on port 6767 to finalize the positioning claim. That closes out essentially every
+verification item this project has.

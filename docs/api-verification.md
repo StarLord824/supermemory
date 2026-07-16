@@ -98,9 +98,17 @@ If you're reading this to understand what Curator actually calls today, **read �
 - **Method/path:** `GET /v3/container-tags/{containerTag}/inferred`
 - **Doc source:** `https://supermemory.ai/docs/memory-review.md`
 - **Response:** `{memories: [{id, memory, parentCount, createdAt, updatedAt, metadata}], total}`
-- **STATUS: UNVERIFIED — confirm on Linux.** This is the Phase-0 gate item called out most
-  prominently in `docs/roadmap.md`: if unsupported on Local, the console's Review Queue tab must be
-  omitted entirely (no dead UI), per `docs/implementation-plan.md` §6.
+- **STATUS: CONFIRMED LIVE 2026-07-16 — this section's earlier conclusion in §11/§12 that it was
+  "absent" was WRONG.** `GET /v3/container-tags/curator_default/inferred` against
+  server-v0.0.5 returns `200 {"memories":[],"total":0}` — an exact match to the doc-based guess,
+  called directly against port 6767 with a valid Bearer token (bypassing Curator's own code
+  entirely, to rule out a client-side bug). **Root cause of the earlier wrong conclusion: this
+  server's live `/v4/openapi` spec does not document every route it actually serves** — the path
+  is real and functional even though it's absent from the spec. Lesson: an OpenAPI spec's absence
+  is not proof a route doesn't exist; only a direct request against the real path is proof.
+  The console's Review Queue tab should render for this server (0 items currently, since nothing
+  has been passively inferred at low confidence yet — Curator's own `remember` calls are explicit,
+  not inferred).
 
 ## 8. Review inferred memory — act (approve / decline / undo)
 
@@ -112,7 +120,9 @@ If you're reading this to understand what Curator actually calls today, **read �
 - **Effects (per doc, not confirmed):** `approve` clears the inference flag (memory ranks as
   explicit fact); `decline` sets forgotten flag (removed from search); `undo` restores unreviewed
   inferred state.
-- **STATUS: UNVERIFIED — confirm on Linux.**
+- **STATUS: route existence UNVERIFIED with a real memoryId** (no inferred memories exist yet to
+  test against — §7's list is empty). Given §7 was live-confirmed despite being spec-absent, this
+  sibling route should be assumed real too pending a direct test once an inferred memory exists.
 
 ## 9. Connections (the gap Curator exists to fill)
 
@@ -122,8 +132,12 @@ If you're reading this to understand what Curator actually calls today, **read �
   hosted-only and is **expected to be unimplemented on the local binary**. Confirming this
   unimplemented status (via a 404/501/not-found response) is itself a Phase-0 deliverable — it lets
   the README state the gap precisely rather than assume it.
-- **STATUS: UNVERIFIED — confirm on Linux** (specifically: confirm it returns *not implemented*
-  rather than silently succeeding or behaving unexpectedly).
+- **STATUS: UNVERIFIED — confirm with a direct request against port 6767**, specifically that it
+  returns *not implemented* rather than silently succeeding. This one matters more than it looks:
+  §7 taught us `/v4/openapi` omits at least one real, working route (`/inferred`), so its absence
+  from that spec is **not** proof `/v3/connections` is unimplemented — only a direct call proves
+  it. This is the one remaining check most worth running before finalizing Curator's positioning
+  claim ("Local has no connectors").
 
 ---
 
@@ -235,7 +249,7 @@ MCP server (see the "End-to-end proof" subsection).
 | `forgetById` | `DELETE /v4/memories` | `{id?, content?, containerTag(required), reason?}` | `{id, forgotten}` |
 | `forgetByPrompt` | `POST /v4/memories/forget-matching` | `{query(required), containerTag(required), dryRun?(server default **false**), threshold?(default 0.5), maxForget?(default 100, max 500), reason?}` | `{dryRun, count, forgetBatchId, summary, candidates?[]/forgotten?[]}` |
 | `listEntriesWithHistory` | `POST /v4/memories/list` | `{containerTags(required array), filters?, limit?, order?, page?, sort?}` | `{memoryEntries:[...], pagination}` — **field is `memoryEntries`, not `memories`** |
-| `listInferred` / `reviewInferred` | — | — | **Confirmed ABSENT** from the live spec — no `/v3/container-tags/{tag}/inferred` path exists at all. Review queue is unsupported on this Local build; console already degrades to `{supported:false}`. |
+| `listInferred` | `GET /v3/container-tags/{tag}/inferred` | — | `{memories:[...], total}` — **CONFIRMED live 2026-07-16 (real 200), despite being absent from the `/v4/openapi` spec** — see the update below the table. `reviewInferred` (the action endpoint) is presumed real too but not yet called against a real memoryId. |
 | `checkHealth` | `GET /` (root) | — | 200 HTML landing page. **No dedicated `/health` path exists** (confirmed absent from the spec) — root is the best liveness signal. |
 | — (confirmed absent) | `/v3/connections` family | — | Absent, as expected — this is the gap Curator exists to fill (docs/context.md §3). |
 
@@ -253,6 +267,13 @@ Corrections vs. the earlier hosted-doc guesses in §1–§9:
 - Two document/memory operations exist that Curator doesn't currently use but are available if
   needed later: `GET/PATCH/DELETE /v3/documents/{id}` (single-document ops, delete by id or
   customId) and `POST /v4/memories` (create memories directly, bypassing the extraction pipeline).
+
+**⚠️ Important caveat on this whole section: the live `/v4/openapi` spec is not exhaustive.**
+`listInferred`'s path (`/v3/container-tags/{tag}/inferred`) was absent from that spec yet returns
+a real `200` when called directly — see the update further below. Treat every "confirmed ABSENT"
+claim derived only from the spec's path list as *unconfirmed*, not proven absent, unless it was
+also independently verified with a direct request. The spec is reliable for confirming a path's
+request/response *shape* once you know it exists, but not reliable for proving non-existence.
 
 ### End-to-end proof (via Curator's own MCP server, real stdio, real server)
 
@@ -293,9 +314,33 @@ fail an entire batch commit; (2) `src/sync/prompt.ts`'s protocol now explicitly 
 allowed character set and to self-sanitize `owner/repo#number`-style ids going forward. Both fixes
 are covered by new tests (`ops.test.ts`, `prompt.test.ts`).
 
-**Remaining open items:** re-running `sync --commit` against the now-fixed sanitizer (should
-succeed against the 12 already-staged, still-valid-content memories), and acceptance tests C2–S1
-(`docs/implementation-plan.md` §7) — the console (B1) in particular — have not been run yet.
+**Update 2026-07-16 (commit retry): succeeded.** Re-ran `sync --commit` after the sanitizer fix —
+all 12 staged memories committed to Supermemory, cursor advanced to `2026-07-15T05:57:21Z`.
+Confirmed via `recall` for one of them (the "Consumer Services" PR #188 decision): the server's
+extraction pipeline had split it into two atomic memories (the decision, and the prior state it
+replaced), both returned with similarity scores. Acceptance tests **C1** (idempotent raw sync) was
+skipped by agreement in favor of exercising the agentic write path directly, which is now proven.
+
+**Update 2026-07-16 (console, B1 in progress): the review-queue "confirmed absent" conclusion in
+§7 above was WRONG — see §7's correction.** `GET /api/review?tag=curator_default` against the
+running console backend returned `{supported:true, memories:[], total:0}`, which looked like a
+possible client-side bug at first. Direct verification against port 6767 (bypassing Curator's own
+code) confirmed the server genuinely returns `200 {"memories":[],"total":0}` for that path — it is
+real and functional. The root cause: **the server's own `/v4/openapi` spec does not document every
+route it serves.** This reverses the Phase-0 gate decision: the console's Review Queue tab should
+render on this server (currently empty, since Curator's `remember` calls are explicit, not
+passively inferred, so nothing has landed in the low-confidence queue yet).
+
+Also confirmed via direct `GET /api/memories?tag=src_github`: all 12 committed memories present
+with correct `memoryEntries` shape and pagination (`{currentPage:1, limit:10, totalItems:16,
+totalPages:2}` — 16 total because the extraction pipeline split some PR summaries into multiple
+atomic memories, e.g. PR #171 became 4 separate memories). This is B1's memory-browser half,
+genuinely proven.
+
+**Remaining open items:** the review-*action* endpoint (approve/decline/undo, §8) has not been
+called against a real memoryId yet — no inferred memories exist to test against, since nothing
+has been passively inferred at low confidence. B1's forget-console half (preview → confirm →
+verify gone, through the UI) has not been run yet. Acceptance tests C2–S1 otherwise complete.
 
 ## Isolation policy
 

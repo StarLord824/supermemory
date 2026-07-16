@@ -218,10 +218,13 @@ Panels:
   API returns them.
 - **Forget console** — natural-language target → **always dry-run preview first** → explicit
   "Confirm deletion" → action log. Doubles as the GDPR right-to-be-forgotten story.
-- **Review queue** — approve/decline/undo low-confidence inferred memories. **Confirmed absent**
-  from this Local build's live OpenAPI spec (server-v0.0.5) — the tab renders **only if** the
-  backend reports the endpoint works (`supported:false` → no dead UI), which in practice means
-  this tab won't appear at all against this server version.
+- **Review queue** — approve/decline/undo low-confidence inferred memories. **Confirmed live and
+  working** against server-v0.0.5 (`GET /v3/container-tags/{tag}/inferred` returns real `200` data
+  — it just isn't documented in the server's own `/v4/openapi` spec, so don't trust that spec's
+  absence as proof a route doesn't exist). The tab still renders conditionally on `supported`, so
+  it degrades gracefully on any Local build where the endpoint genuinely isn't there. Currently
+  empty in practice until Supermemory passively infers a low-confidence memory — everything
+  Curator writes via `remember` is explicit, not inferred, so it won't appear in this queue.
 
 API routes (all delegating to `src/supermemory/ops.ts`): `GET /api/memories?tag=` (proxies
 `POST /v4/memories/list`, response field `memoryEntries`), `GET /api/review?tag=`,
