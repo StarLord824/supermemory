@@ -132,7 +132,7 @@ program
 
 program
   .command("tags")
-  .description("List container tags found in Supermemory Local (derived from /v3/documents/list — there is no native list-tags endpoint)")
+  .description("List container tags found in Supermemory Local (derived from the documents list — there is no native list-tags endpoint)")
   .action(async () => {
     try {
       const config = resolveConfig();
