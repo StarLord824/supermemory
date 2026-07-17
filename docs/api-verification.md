@@ -546,3 +546,28 @@ agree.
   tab-shell changes.
 - **Docs tab** renders the in-app reference (CLI commands, MCP tools, console-tab descriptions,
   including the "forget: Dry-run by default" safety note).
+
+## 16. Inference/review queue + document delete (2026-07-17)
+
+Findings from a verification-gap-closing pass, all against the same live server-v0.0.5.
+
+**The `/inferred` review queue is not populable on-demand on this binary — the extraction pipeline
+produces only EXPLICIT memories.** Attempted to generate an inferred (low-confidence) memory to
+finally exercise the review-*action* endpoint (§8, never called against a real memoryId): added a
+document under a throwaway tag with deliberately conversational, implication-heavy content ("I had
+a long chat with Sarah… she prefers dark mode… the Q3 report is due next Friday…"). The pipeline
+extracted several memories from it (e.g. "Sarah is stressed about the upcoming Q3 report.") — but
+every one had `isInference: false`, and `GET /v3/container-tags/{tag}/inferred` stayed
+`{"memories":[],"total":0}`. **Conclusion:** on server-v0.0.5, ordinary document adds create
+explicit memories directly; nothing observed makes the local binary emit a low-confidence
+*inferred* memory into the review queue. So the review-action endpoint (approve/decline/undo)
+remains unverified against a real memoryId — not for lack of trying, but because there is no known
+way to produce the inferred memory it would act on. The queue's *list* endpoint and the console's
+conditional Review tab are still confirmed working (§7); only the act-on-an-item path is untested.
+
+**`DELETE /v3/documents/{id}` — CONFIRMED live (incidental).** Cleaning up the throwaway document
+above: `DELETE /v3/documents/Z72J16w19m8k38EwL3qeQM` returned `204`, and a follow-up
+`/v4/memories/list` for that tag returned zero entries — confirming the delete cascades to the
+document's extracted memories. (This endpoint was previously listed in §12 as "available but not
+used by Curator"; now at least confirmed functional.) The curated demo tags were verified untouched
+afterward (`curator tags` still showed `curator_test`:2, `src_github`:12).

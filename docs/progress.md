@@ -103,8 +103,12 @@ persistent env var instead of a file). See "What's NOT done" for the one remaini
 ## What's NOT done — do not assume these work
 
 - **The review-*action* endpoint** (`POST .../inferred/{id}/review` — approve/decline/undo) has not
-  been called against a real memoryId — no inferred memory exists yet to test against, since
-  nothing has been passively inferred at low confidence.
+  been called against a real memoryId — no inferred memory exists to test against. **Actively
+  investigated 2026-07-17** (see `docs/api-verification.md` §16): adding a document with
+  conversational, implication-heavy content produced only *explicit* memories (`isInference:false`)
+  and left the `/inferred` queue empty — nothing found makes server-v0.0.5 emit a low-confidence
+  inferred memory on demand. So this isn't a "haven't gotten to it" gap; it's blocked on the local
+  binary not producing the input the endpoint acts on.
 - **C1 (raw-sync idempotency)** was deliberately skipped in favor of proving the write path via the
   agentic flow directly, which is a strictly harder/more complete test that already passed.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
