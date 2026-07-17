@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { MemoryBrowser } from "../src/ui/app/src/components/MemoryBrowser.js";
 import { ReviewQueue } from "../src/ui/app/src/components/ReviewQueue.js";
 import { ForgetConsole } from "../src/ui/app/src/components/ForgetConsole.js";
+import { Badge, Card, TabBar } from "../src/ui/app/src/components/ui.js";
 
 function loadFixture<T>(name: string): T {
   const path = fileURLToPath(new URL(`../src/ui/app/src/fixtures/${name}`, import.meta.url));
@@ -113,5 +114,31 @@ describe("ForgetConsole", () => {
       />,
     );
     expect(html).toContain("forgot memories matching");
+  });
+});
+
+describe("ui primitives", () => {
+  it("Card renders its title and children", () => {
+    const html = renderToStaticMarkup(<Card title="Memories">content here</Card>);
+    expect(html).toContain("Memories");
+    expect(html).toContain("content here");
+  });
+
+  it("Badge renders its children", () => {
+    const html = renderToStaticMarkup(<Badge tone="green">done</Badge>);
+    expect(html).toContain("done");
+  });
+
+  it("TabBar renders every tab and marks the active one", () => {
+    const html = renderToStaticMarkup(
+      <TabBar
+        tabs={[{ id: "memories", label: "Memories" }, { id: "graph", label: "Graph" }]}
+        active="graph"
+        onChange={() => {}}
+      />,
+    );
+    expect(html).toContain("Memories");
+    expect(html).toContain("Graph");
+    expect(html).toContain('aria-selected="true"');
   });
 });
