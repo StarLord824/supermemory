@@ -245,26 +245,37 @@ curator ui --port 4141   # 4141 is the default
 ```
 
 Serves the built SPA plus a JSON API that proxies Supermemory server-side — **the API key never
-reaches the browser**.
+reaches the browser**. The console is a dark, tabbed UI with self-hosted fonts (Inter, Space
+Grotesk, JetBrains Mono via `@fontsource/*` — no Google Fonts CDN, works fully offline), styled to
+match Supermemory's own hosted dashboard.
 
-Panels:
-- **Memory browser** — memories per container tag, `isLatest`/superseded badges, and real
-  version-chain relations (`updates`/`extends`/`derives`, confirmed present on Local) where the
-  API returns them.
-- **Forget console** — natural-language target → **always dry-run preview first** → explicit
-  "Confirm deletion" → action log. Doubles as the GDPR right-to-be-forgotten story.
-- **Review queue** — approve/decline/undo low-confidence inferred memories. **Confirmed live and
+Tabs:
+- **Memories** — memories per container tag, `isLatest`/superseded badges, and real version-chain
+  relations (`updates`/`extends`/`derives`, confirmed present on Local) where the API returns them.
+- **Review** — approve/decline/undo low-confidence inferred memories. **Confirmed live and
   working** against server-v0.0.5 (`GET /v3/container-tags/{tag}/inferred` returns real `200` data
   — it just isn't documented in the server's own `/v4/openapi` spec, so don't trust that spec's
-  absence as proof a route doesn't exist). The tab still renders conditionally on `supported`, so
-  it degrades gracefully on any Local build where the endpoint genuinely isn't there. Currently
-  empty in practice until Supermemory passively infers a low-confidence memory — everything
-  Curator writes via `remember` is explicit, not inferred, so it won't appear in this queue.
+  absence as proof a route doesn't exist). This tab only appears once the backend confirms
+  `supported: true` — no dead tab on any Local build where the endpoint genuinely isn't there.
+  Currently empty in practice until Supermemory passively infers a low-confidence memory —
+  everything Curator writes via `remember` is explicit, not inferred, so it won't appear here.
+- **Forget** — natural-language target → **always dry-run preview first** → explicit
+  "Confirm deletion" → action log. Doubles as the GDPR right-to-be-forgotten story.
+- **Graph** — renders the official `@supermemory/memory-graph` React component (MIT-licensed,
+  Supermemory's own package — credited, not reimplemented) full-bleed with no title chrome.
+  Documents from the active container tag are graph nodes, each with its own memories nested as
+  child nodes; click a node for its detail popover (upstream component behavior). Backed by a new
+  `GET /api/graph?tag=` route
+  that joins `POST /v3/documents/list` (real document titles) with `POST /v4/memories/list` (real
+  memories) via each memory's `documentIds[0]`; memories with no matching document bucket into a
+  synthetic "Ungrouped" node rather than being dropped. Live-verified 2026-07-17 against a real
+  12-document `src_github` dataset — see `docs/api-verification.md` §14.
 
 API routes (all delegating to `src/supermemory/ops.ts`): `GET /api/memories?tag=` (proxies
 `POST /v4/memories/list`, response field `memoryEntries`), `GET /api/review?tag=`,
 `POST /api/review/:id {action}`, `POST /api/forget {target, mode, dryRun}` (dry-run defaults true
-here too, overriding the server's own unsafe `false` default).
+here too, overriding the server's own unsafe `false` default), `GET /api/graph?tag=` (proxies and
+joins `POST /v3/documents/list` + `POST /v4/memories/list`, see §14).
 
 ## 10. Verification status — read before trusting
 

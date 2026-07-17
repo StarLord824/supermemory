@@ -274,6 +274,51 @@ export async function listEntriesWithHistory(
   });
 }
 
+/** A document record as returned by /v3/documents/list. */
+export interface DocumentRecord {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  status: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+  customId?: string | null;
+  url?: string | null;
+  connectionId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ListDocumentsResult {
+  /**
+   * NOTE: the response key really is `memories`, even though these are
+   * documents — confirmed from the live server's own OpenAPI spec, not a typo.
+   */
+  memories: DocumentRecord[];
+  pagination: {
+    currentPage: number;
+    totalItems: number;
+    totalPages: number;
+    limit?: number;
+  };
+}
+
+// SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v3/documents/list
+// (operationId postV3DocumentsList, "List documents") — path/response CONFIRMED
+// 2026-07-17. The `containerTags` request param is marked deprecated/hidden on
+// THIS endpoint's spec entry (unlike /v4/memories/list), but a live A/B request
+// against two different tags CONFIRMED it still filters correctly — see
+// docs/api-verification.md §14.
+export async function listDocuments(
+  config: CuratorConfig,
+  containerTag: string,
+): Promise<ListDocumentsResult> {
+  return rawRequest<ListDocumentsResult>(config, "/v3/documents/list", {
+    method: "POST",
+    body: { containerTags: [containerTag], limit: 200 },
+  });
+}
+
 export interface InferredMemory {
   id: string;
   memory: string;

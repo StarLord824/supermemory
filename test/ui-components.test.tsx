@@ -1,10 +1,18 @@
+vi.mock("@supermemory/memory-graph", () => ({
+  MemoryGraph: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="mock-memory-graph">{children}</div>
+  ),
+}));
+
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MemoryBrowser } from "../src/ui/app/src/components/MemoryBrowser.js";
 import { ReviewQueue } from "../src/ui/app/src/components/ReviewQueue.js";
 import { ForgetConsole } from "../src/ui/app/src/components/ForgetConsole.js";
+import { GraphView } from "../src/ui/app/src/components/GraphView.js";
+import { Badge, Card, TabBar } from "../src/ui/app/src/components/ui.js";
 
 function loadFixture<T>(name: string): T {
   const path = fileURLToPath(new URL(`../src/ui/app/src/fixtures/${name}`, import.meta.url));
@@ -113,5 +121,59 @@ describe("ForgetConsole", () => {
       />,
     );
     expect(html).toContain("forgot memories matching");
+  });
+});
+
+describe("ui primitives", () => {
+  it("Card renders its title and children", () => {
+    const html = renderToStaticMarkup(<Card title="Memories">content here</Card>);
+    expect(html).toContain("Memories");
+    expect(html).toContain("content here");
+  });
+
+  it("Badge renders its children", () => {
+    const html = renderToStaticMarkup(<Badge tone="green">done</Badge>);
+    expect(html).toContain("done");
+  });
+
+  it("TabBar renders every tab and marks the active one", () => {
+    const html = renderToStaticMarkup(
+      <TabBar
+        tabs={[{ id: "memories", label: "Memories" }, { id: "graph", label: "Graph" }]}
+        active="graph"
+        onChange={() => {}}
+      />,
+    );
+    expect(html).toContain("Memories");
+    expect(html).toContain("Graph");
+    expect(html).toContain('aria-selected="true"');
+  });
+});
+
+describe("GraphView", () => {
+  it("renders its container and passes an empty-state child to the graph", () => {
+    const html = renderToStaticMarkup(<GraphView tag="src_github" />);
+
+    expect(html).toContain("graph-view");
+    expect(html).toContain("mock-memory-graph");
+    expect(html).toContain("No memories to graph");
+  });
+});
+
+import { App } from "../src/ui/app/src/App.js";
+
+describe("App tab shell", () => {
+  it("renders the tab bar with Memories and Graph tabs", () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain("Memories");
+    expect(html).toContain("Graph");
+    expect(html).toContain("Forget");
+  });
+
+  it("does not render a Review tab before the backend confirms support", () => {
+    // Initial render: reviewSupported starts false, so the tab must be absent —
+    // no dead tab for a capability the server may not have.
+    const html = renderToStaticMarkup(<App />);
+    expect(html).not.toContain(">Review<");
   });
 });

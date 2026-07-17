@@ -78,3 +78,40 @@ export async function confirmForget(target: string, containerTag: string): Promi
   if (!res.ok) throw new Error(`Failed to confirm forget (${res.status})`);
   return res.json();
 }
+
+export interface GraphApiMemory {
+  id: string;
+  memory: string;
+  isStatic: boolean;
+  spaceId: string;
+  isLatest: boolean;
+  isForgotten: boolean;
+  forgetAfter: string | null;
+  forgetReason: string | null;
+  version: number;
+  parentMemoryId: string | null;
+  rootMemoryId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  memoryRelations?: Record<string, "updates" | "extends" | "derives"> | null;
+}
+
+export interface GraphApiDocument {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  documentType: string;
+  createdAt: string;
+  updatedAt: string;
+  memories: GraphApiMemory[];
+}
+
+export interface GraphResponse {
+  documents: GraphApiDocument[];
+}
+
+export async function fetchGraph(tag: string): Promise<GraphResponse> {
+  const res = await fetch(`/api/graph?tag=${encodeURIComponent(tag)}`);
+  if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
+  return res.json();
+}
