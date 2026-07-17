@@ -13,11 +13,14 @@ import {
 import { MemoryBrowser } from "./components/MemoryBrowser.js";
 import { ForgetConsole } from "./components/ForgetConsole.js";
 import { ReviewQueue } from "./components/ReviewQueue.js";
+import { GraphView } from "./components/GraphView.js";
+import { Card, TabBar } from "./components/ui.js";
 
 const DEFAULT_TAG = "curator_default";
 
 export function App() {
   const [tag, setTag] = useState(DEFAULT_TAG);
+  const [activeTab, setActiveTab] = useState("memories");
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [loadingMemories, setLoadingMemories] = useState(true);
   const [reviewSupported, setReviewSupported] = useState(false);
@@ -66,37 +69,61 @@ export function App() {
     setForgetQuery("");
   }
 
+  // The Review tab only exists if the server actually supports the
+  // inferred-memories endpoint — no dead tab. See docs/api-verification.md §7.
+  const tabs = [
+    { id: "memories", label: "Memories" },
+    ...(reviewSupported ? [{ id: "review", label: "Review" }] : []),
+    { id: "forget", label: "Forget" },
+    { id: "graph", label: "Graph" },
+  ];
+
   return (
-    <main>
-      <h1>Curator — Governance Console</h1>
+    <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-ink">Curator</h1>
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
+          Container tag
+          <input
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            data-testid="tag-input"
+            className="rounded-lg border border-hairline bg-elevated px-3 py-1.5 font-mono text-sm text-ink focus:border-accent-blue focus:outline-none"
+          />
+        </label>
+      </header>
 
-      <label>
-        Container tag:{" "}
-        <input value={tag} onChange={(e) => setTag(e.target.value)} data-testid="tag-input" />
-      </label>
+      <div className="mb-6">
+        <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
+      </div>
 
-      <section>
-        <h2>Memories</h2>
-        <MemoryBrowser tag={tag} memories={memories} loading={loadingMemories} />
-      </section>
+      {activeTab === "memories" ? (
+        <Card title="Memories">
+          <MemoryBrowser tag={tag} memories={memories} loading={loadingMemories} />
+        </Card>
+      ) : null}
 
-      <section>
-        <h2>Review queue</h2>
-        <ReviewQueue supported={reviewSupported} items={reviewItems} onAction={handleReviewAction} />
-      </section>
+      {activeTab === "review" ? (
+        <Card title="Review queue">
+          <ReviewQueue supported={reviewSupported} items={reviewItems} onAction={handleReviewAction} />
+        </Card>
+      ) : null}
 
-      <section>
-        <h2>Forget</h2>
-        <ForgetConsole
-          query={forgetQuery}
-          onQueryChange={setForgetQuery}
-          onPreview={handlePreview}
-          preview={forgetPreview}
-          onConfirm={handleConfirm}
-          actionLog={actionLog}
-          previewing={previewing}
-        />
-      </section>
+      {activeTab === "forget" ? (
+        <Card title="Forget">
+          <ForgetConsole
+            query={forgetQuery}
+            onQueryChange={setForgetQuery}
+            onPreview={handlePreview}
+            preview={forgetPreview}
+            onConfirm={handleConfirm}
+            actionLog={actionLog}
+            previewing={previewing}
+          />
+        </Card>
+      ) : null}
+
+      {activeTab === "graph" ? <GraphView tag={tag} /> : null}
     </main>
   );
 }

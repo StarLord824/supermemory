@@ -159,3 +159,21 @@ describe("GraphView", () => {
     expect(html).toContain("No memories to graph");
   });
 });
+
+import { App } from "../src/ui/app/src/App.js";
+
+describe("App tab shell", () => {
+  it("renders the tab bar with Memories and Graph tabs", () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain("Memories");
+    expect(html).toContain("Graph");
+    expect(html).toContain("Forget");
+  });
+
+  it("does not render a Review tab before the backend confirms support", () => {
+    // Initial render: reviewSupported starts false, so the tab must be absent —
+    // no dead tab for a capability the server may not have.
+    const html = renderToStaticMarkup(<App />);
+    expect(html).not.toContain(">Review<");
+  });
+});
