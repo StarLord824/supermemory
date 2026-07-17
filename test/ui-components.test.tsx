@@ -12,7 +12,7 @@ import { MemoryBrowser } from "../src/ui/app/src/components/MemoryBrowser.js";
 import { ReviewQueue } from "../src/ui/app/src/components/ReviewQueue.js";
 import { ForgetConsole } from "../src/ui/app/src/components/ForgetConsole.js";
 import { GraphView } from "../src/ui/app/src/components/GraphView.js";
-import { Badge, Card, TabBar } from "../src/ui/app/src/components/ui.js";
+import { Badge, Card, TabBar, TagPicker } from "../src/ui/app/src/components/ui.js";
 
 function loadFixture<T>(name: string): T {
   const path = fileURLToPath(new URL(`../src/ui/app/src/fixtures/${name}`, import.meta.url));
@@ -147,6 +147,24 @@ describe("ui primitives", () => {
     expect(html).toContain("Memories");
     expect(html).toContain("Graph");
     expect(html).toContain('aria-selected="true"');
+  });
+});
+
+describe("TagPicker", () => {
+  it("reflects the current value and offers known tags as datalist suggestions", () => {
+    const html = renderToStaticMarkup(
+      <TagPicker
+        value="src_github"
+        tags={[
+          { tag: "src_github", documentCount: 12 },
+          { tag: "curator_default", documentCount: 3 },
+        ]}
+        onChange={() => {}}
+      />,
+    );
+    expect(html).toContain('value="src_github"');
+    expect(html).toContain("tag-suggestions");
+    expect(html).toContain('value="curator_default"');
   });
 });
 

@@ -115,3 +115,18 @@ export async function fetchGraph(tag: string): Promise<GraphResponse> {
   if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
   return res.json();
 }
+
+export interface TagInfo {
+  tag: string;
+  documentCount: number;
+}
+
+export interface TagsResponse {
+  tags: TagInfo[];
+}
+
+export async function fetchTags(): Promise<TagsResponse> {
+  const res = await fetch("/api/tags");
+  if (!res.ok) throw new Error(`Failed to load container tags (${res.status})`);
+  return res.json();
+}

@@ -3,18 +3,20 @@ import {
   confirmForget,
   fetchMemories,
   fetchReview,
+  fetchTags,
   postReviewAction,
   previewForget,
   type ForgetPreview,
   type MemoryEntry,
   type ReviewAction,
   type InferredMemory,
+  type TagInfo,
 } from "./api.js";
 import { MemoryBrowser } from "./components/MemoryBrowser.js";
 import { ForgetConsole } from "./components/ForgetConsole.js";
 import { ReviewQueue } from "./components/ReviewQueue.js";
 import { GraphView } from "./components/GraphView.js";
-import { Card, TabBar } from "./components/ui.js";
+import { Card, TabBar, TagPicker } from "./components/ui.js";
 
 const DEFAULT_TAG = "curator_default";
 
@@ -25,6 +27,8 @@ export function App() {
   const [loadingMemories, setLoadingMemories] = useState(true);
   const [reviewSupported, setReviewSupported] = useState(false);
   const [reviewItems, setReviewItems] = useState<InferredMemory[]>([]);
+  const [tags, setTags] = useState<TagInfo[]>([]);
+  const [loadingTags, setLoadingTags] = useState(true);
 
   const [forgetQuery, setForgetQuery] = useState("");
   const [forgetPreview, setForgetPreview] = useState<ForgetPreview | null>(null);
@@ -45,6 +49,13 @@ export function App() {
       })
       .catch(() => setReviewSupported(false));
   }, [tag]);
+
+  useEffect(() => {
+    fetchTags()
+      .then((res) => setTags(res.tags))
+      .catch(() => setTags([]))
+      .finally(() => setLoadingTags(false));
+  }, []);
 
   async function handleReviewAction(id: string, action: ReviewAction) {
     await postReviewAction(tag, id, action);
@@ -86,15 +97,7 @@ export function App() {
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <h1 className="font-display text-2xl font-bold tracking-tight text-ink">Curator</h1>
-        <label className="flex items-center gap-2 text-sm text-ink-muted">
-          Container tag
-          <input
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-            data-testid="tag-input"
-            className="rounded-lg border border-hairline bg-elevated px-3 py-1.5 font-mono text-sm text-ink focus:border-accent-blue focus:outline-none"
-          />
-        </label>
+        <TagPicker value={tag} tags={tags} onChange={setTag} />
       </header>
 
       <div className="mb-6">

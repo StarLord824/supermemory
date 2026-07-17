@@ -69,3 +69,31 @@ export function TabBar({
     </div>
   );
 }
+
+export function TagPicker({
+  value,
+  tags,
+  onChange,
+}: {
+  value: string;
+  tags: { tag: string; documentCount: number }[];
+  onChange: (tag: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-ink-muted">
+      Container tag
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        list="known-container-tags"
+        data-testid="tag-input"
+        className="rounded-lg border border-hairline bg-elevated px-3 py-1.5 font-mono text-sm text-ink focus:border-accent-blue focus:outline-none"
+      />
+      <datalist id="known-container-tags" data-testid="tag-suggestions">
+        {tags.map((t) => (
+          <option key={t.tag} value={t.tag} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
