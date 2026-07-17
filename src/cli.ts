@@ -130,6 +130,22 @@ program
     }
   });
 
+program
+  .command("tags")
+  .description("List container tags found in Supermemory Local (derived from /v3/documents/list — there is no native list-tags endpoint)")
+  .action(async () => {
+    try {
+      const config = resolveConfig();
+      const { listContainerTags } = await import("./supermemory/ops.js");
+      const { formatTagsTable } = await import("./cli-format.js");
+      const result = await listContainerTags(config);
+      console.log(formatTagsTable(result.tags));
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
 if (process.argv.length <= 2) {
   // Interactive menu only makes sense on a real terminal. In a pipe/CI (no
   // TTY), a prompt would hang forever with nothing to answer it, so show help.
