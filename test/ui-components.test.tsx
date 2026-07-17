@@ -12,6 +12,7 @@ import { MemoryBrowser } from "../src/ui/app/src/components/MemoryBrowser.js";
 import { ReviewQueue } from "../src/ui/app/src/components/ReviewQueue.js";
 import { ForgetConsole } from "../src/ui/app/src/components/ForgetConsole.js";
 import { GraphView } from "../src/ui/app/src/components/GraphView.js";
+import { HomeView } from "../src/ui/app/src/components/HomeView.js";
 import { Badge, Card, TabBar, TagPicker } from "../src/ui/app/src/components/ui.js";
 
 function loadFixture<T>(name: string): T {
@@ -168,6 +169,32 @@ describe("TagPicker", () => {
   });
 });
 
+describe("HomeView", () => {
+  it("renders the live stats it was given", () => {
+    const html = renderToStaticMarkup(
+      <HomeView
+        tag="src_github"
+        tags={[{ tag: "src_github", documentCount: 12 }]}
+        loadingTags={false}
+        memoryCount={7}
+        reviewSupported
+      />,
+    );
+    expect(html).toContain("home-view");
+    expect(html).toContain(">1<");
+    expect(html).toContain(">7<");
+    expect(html).toContain("Supported");
+  });
+
+  it("shows a loading placeholder for the tag count while tags are still loading", () => {
+    const html = renderToStaticMarkup(
+      <HomeView tag="src_github" tags={[]} loadingTags memoryCount={0} reviewSupported={false} />,
+    );
+    expect(html).toContain("…");
+    expect(html).toContain("Not available");
+  });
+});
+
 describe("GraphView", () => {
   it("renders its container and passes an empty-state child to the graph", () => {
     const html = renderToStaticMarkup(<GraphView tag="src_github" />);
@@ -181,17 +208,21 @@ describe("GraphView", () => {
 import { App } from "../src/ui/app/src/App.js";
 
 describe("App tab shell", () => {
-  it("renders the tab bar with Memories and Graph tabs", () => {
+  it("renders the tab bar with Home, Memories, Forget, and Graph tabs", () => {
     const html = renderToStaticMarkup(<App />);
+    expect(html).toContain("Home");
     expect(html).toContain("Memories");
     expect(html).toContain("Graph");
     expect(html).toContain("Forget");
   });
 
   it("does not render a Review tab before the backend confirms support", () => {
-    // Initial render: reviewSupported starts false, so the tab must be absent —
-    // no dead tab for a capability the server may not have.
     const html = renderToStaticMarkup(<App />);
     expect(html).not.toContain(">Review<");
+  });
+
+  it("shows the Home panel by default", () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain("home-view");
   });
 });

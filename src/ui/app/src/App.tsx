@@ -16,13 +16,14 @@ import { MemoryBrowser } from "./components/MemoryBrowser.js";
 import { ForgetConsole } from "./components/ForgetConsole.js";
 import { ReviewQueue } from "./components/ReviewQueue.js";
 import { GraphView } from "./components/GraphView.js";
+import { HomeView } from "./components/HomeView.js";
 import { Card, TabBar, TagPicker } from "./components/ui.js";
 
 const DEFAULT_TAG = "curator_default";
 
 export function App() {
   const [tag, setTag] = useState(DEFAULT_TAG);
-  const [activeTab, setActiveTab] = useState("memories");
+  const [activeTab, setActiveTab] = useState("home");
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [loadingMemories, setLoadingMemories] = useState(true);
   const [reviewSupported, setReviewSupported] = useState(false);
@@ -83,6 +84,7 @@ export function App() {
   // The Review tab only exists if the server actually supports the
   // inferred-memories endpoint — no dead tab. See docs/api-verification.md §7.
   const tabs = [
+    { id: "home", label: "Home" },
     { id: "memories", label: "Memories" },
     ...(reviewSupported ? [{ id: "review", label: "Review" }] : []),
     { id: "forget", label: "Forget" },
@@ -91,7 +93,7 @@ export function App() {
 
   // Changing the tag can retract review support out from under an open Review
   // tab; fall back rather than strand a panel with no corresponding tab.
-  const active = tabs.some((t) => t.id === activeTab) ? activeTab : "memories";
+  const active = tabs.some((t) => t.id === activeTab) ? activeTab : "home";
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
@@ -103,6 +105,18 @@ export function App() {
       <div className="mb-6">
         <TabBar tabs={tabs} active={active} onChange={setActiveTab} />
       </div>
+
+      {active === "home" ? (
+        <Card title="Overview">
+          <HomeView
+            tag={tag}
+            tags={tags}
+            loadingTags={loadingTags}
+            memoryCount={memories.length}
+            reviewSupported={reviewSupported}
+          />
+        </Card>
+      ) : null}
 
       {active === "memories" ? (
         <Card title="Memories">
