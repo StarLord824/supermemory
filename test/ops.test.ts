@@ -4,6 +4,7 @@ import {
   forgetById,
   forgetByPrompt,
   getProfile,
+  listDocuments,
   listEntriesWithHistory,
   listInferred,
   recall,
@@ -121,6 +122,29 @@ describe("ops (all calls go through rawRequest against confirmed live paths)", (
       expect(url).toBe("http://localhost:6767/v4/memories/list");
       expect(JSON.parse(init.body)).toEqual({ containerTags: ["src_github"] });
       expect(result.memoryEntries).toEqual([{ id: "mem_1" }]);
+    });
+  });
+
+  describe("listDocuments", () => {
+    it("POSTs containerTags to /v3/documents/list and returns the (confusingly named) memories array", async () => {
+      const fetchMock = mockFetchOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          memories: [
+            { id: "doc_1", title: "PR #171", summary: "s", status: "done", type: "text", createdAt: "t", updatedAt: "t" },
+          ],
+          pagination: { currentPage: 1, totalItems: 1, totalPages: 1 },
+        }),
+      });
+
+      const result = await listDocuments(config, "src_github");
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("http://localhost:6767/v3/documents/list");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ containerTags: ["src_github"], limit: 200 }));
+      expect(result.memories[0].title).toBe("PR #171");
     });
   });
 
