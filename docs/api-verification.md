@@ -388,7 +388,7 @@ When live verification on Linux confirms or corrects a path, payload field, or r
 2. Update only `src/supermemory/ops.ts` (and its tests) — no other file should ever hardcode a
    Supermemory endpoint path or payload field name.
 
-## Credentials note
+## 13. Credentials note
 
 **CORRECTED 2026-07-16 against server-v0.0.5 (running live in WSL2).** Our assumption was wrong on
 two counts:
@@ -428,3 +428,62 @@ Starting the server from a different directory creates a different data dir and 
 keep the launch cwd stable, or set `SUPERMEMORY_DATA_DIR` explicitly.
 
 Never print or commit the key or the env file contents.
+
+## 14. Documents list + graph (2026-07-17)
+
+Live-verified against the same running `supermemory-server` v0.0.5 / WSL2 instance as §12–§13, with
+its persisted 12-document `src_github` dataset (from the earlier agentic sync run) still intact.
+
+**`POST /v3/documents/list` — CONFIRMED path/response.**
+```
+curl -s -X POST http://localhost:6767/v3/documents/list \
+  -H "Content-Type: application/json" \
+  -d '{"containerTags":["src_github"],"limit":200}'
+```
+returned `200 {"memories":[...12 document objects...],"pagination":{"currentPage":1,"limit":200,"totalItems":12,"totalPages":1}}`.
+Each object has `id, title, summary, status, type, createdAt, updatedAt, customId, url,
+connectionId, metadata` — matching `DocumentRecord` in `src/supermemory/ops.ts` exactly. **The
+response key really is `memories`, not `documents`**, despite every item being a document — same
+confusingly-named-field pattern already seen in §12 for `/v4/memories/list`.
+
+**`containerTags` filter — CONFIRMED it actually filters**, resolving the open question from Task 1
+(the request param is marked deprecated/hidden in this endpoint's `/v4/openapi` entry, unlike on
+`/v4/memories/list`, which raised doubt about whether it's honored at all). A direct A/B request
+settles it:
+```
+POST /v3/documents/list {"containerTags":["src_github"],"limit":200}     → 12 documents
+POST /v3/documents/list {"containerTags":["curator_default"],"limit":200} → 0 documents ({"memories":[],"pagination":{"currentPage":1,"limit":200,"totalItems":0,"totalPages":0}})
+```
+Two different tags produced two different result sets — the filter is live and correctly scoping,
+not silently ignored. `src/supermemory/ops.ts`'s `listDocuments` SOURCE comment has been updated
+from "STATUS: UNVERIFIED whether it filters" to record this confirmation. (Per the plan: no code
+change was needed regardless of outcome, since `buildGraphDocuments`'s join is defensive either
+way — this just closes the open question.)
+
+**`GET /api/graph?tag=` — CONFIRMED end-to-end.** With `curator ui` running against the real
+server, `curl http://localhost:4141/api/graph?tag=src_github` returned real joined data: each of
+the 12 `src_github` documents (e.g. `"PR #171 (merged 2026-06-22) in medullabs-code/Medu..."`)
+paired with its own real memory objects (id, memory text, `isLatest`, `isForgotten`, `version`,
+`memoryRelations`, etc.) pulled from `/v4/memories/list` and joined via `documentIds[0]`, exactly
+as `buildGraphDocuments` (Task 2) does. No memories under `src_github` fell into the synthetic
+"Ungrouped" bucket in this dataset (every memory's `documentIds[0]` matched a real document), so
+the Ungrouped path itself remains verified only by the Task 2 unit tests, not by this live run —
+worth rechecking if a future sync produces an orphaned memory.
+
+**Browser walkthrough — human-confirmed, 2026-07-17.** With the container tag set to `src_github`
+in the running console (`http://localhost:4141`):
+- **Graph tab:** the `@supermemory/memory-graph` canvas rendered real document nodes (square icons)
+  and memory nodes (hexagons) connected by edges, matching the confirmed `/api/graph` response
+  shape. The Fit / Center / zoom-% controls and a collapsible Legend were present and functional,
+  confirming the real (non-mocked) package resolved and initialized correctly in the production
+  build — not just in Task 6's mocked unit tests.
+- **Memories tab:** rendered the real list of `src_github` memories with the dark restyle.
+- **Review tab:** present (confirms `reviewSupported: true` on this server, per §7) and showed its
+  correct empty state ("No inferred memories awaiting review").
+- **Forget tab:** rendered the dark-styled input/preview UI in its initial (no-preview) state.
+
+Not explicitly exercised in this pass: clicking an individual node to open the component's detail
+popover, and pan/zoom drag interaction (the static screenshot confirms the controls exist and the
+graph is laid out via force-directed positioning, but an interactive drag/click was not performed
+during this verification). Low risk — this interaction surface belongs entirely to the upstream
+`@supermemory/memory-graph` package, not to Curator's own code.

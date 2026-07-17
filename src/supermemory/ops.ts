@@ -306,8 +306,8 @@ export interface ListDocumentsResult {
 // SOURCE: live GET /v4/openapi on server-v0.0.5, path POST /v3/documents/list
 // (operationId postV3DocumentsList, "List documents") — path/response CONFIRMED
 // 2026-07-17. The `containerTags` request param is marked deprecated/hidden on
-// THIS endpoint (unlike /v4/memories/list) — STATUS: UNVERIFIED whether it
-// actually filters; Task 2's join is defensive either way. See
+// THIS endpoint's spec entry (unlike /v4/memories/list), but a live A/B request
+// against two different tags CONFIRMED it still filters correctly — see
 // docs/api-verification.md §14.
 export async function listDocuments(
   config: CuratorConfig,

@@ -12,7 +12,10 @@ loop (dry-run **and** real deletion) was proven through Curator's real MCP serve
 write path — `curator sync --review` → real `claude` + real Coral data → `curator sync --commit` →
 real Supermemory writes — was proven end-to-end with 12 real memories from real GitHub PRs; and the
 governance console (B1) was walked through in an actual browser — memory browser, review queue, and
-a real preview→confirm→gone deletion, all against the live server. `/v3/connections` was confirmed
+a real preview→confirm→gone deletion, all against the live server. The console was later restyled
+to match Supermemory's own hosted dashboard and gained a Graph tab (`@supermemory/memory-graph`,
+the memory-graph embed previously deferred as cut line 1), both live-verified in a real browser
+against real data. `/v3/connections` was confirmed
 via direct request to genuinely 404, closing Curator's core positioning claim. Two surprises along
 the way, both corrected: the review-queue endpoints were wrongly marked "confirmed absent" at first
 (they're real, just undocumented in the server's own spec), and the server's data directory
@@ -47,15 +50,16 @@ persistent env var instead of a file). See "What's NOT done" for the one remaini
 | `feat: interactive CLI menu (arrow-key mode when run with no args)` | `src/interactive.ts` — `@clack/prompts` menu covering status/sync/connect/ui, launched when `curator` runs with no arguments (flag surface unchanged). A knowing, scoped exception to CLAUDE.md's "plain commander" rule (documented in `docs/usage.md §2b`). **Reviewed and corrected before landing:** an initial draft had added three speculative agent runtimes (`kimi`/`opencode`/`cursor`) with guessed flags and no verification, and a "Start MCP Server" menu option — both removed. The runtimes violated the project's verify-don't-assume discipline (only `claude`/`agy` are live-verified) and their piped-stdio spawn would hang on any first-run permission prompt; the MCP menu option would corrupt the stdio JSON-RPC wire with clack's stdout banners. Also fixed: suggestion list now shows *before* the instruction prompt (where it's actionable) via a new `suppressSuggestions` flag on `runAgentSync`; consistent cancel handling; port validation; a real (not zero-width) claude gradient. Tests lock `AGENT_RUNTIMES` to exactly `[claude, agy]` and reject the removed names. 6 new tests. |
 | `docs: B1 closed live in-browser + /v3/connections confirmed 404` | Restarted the real server (same data dir, same key, 16 memories persisted correctly across restart — confirms encrypted local storage survives a restart). Hit a real operational gotcha along the way: the server's data directory collided with the path Curator's `config.ts` reads its credentials file from, and the server silently encrypted/consumed the plaintext `env` file it found there. Fixed by using a persistent `SUPERMEMORY_API_KEY` env var (`setx`) instead of a file, sidestepping the collision. Then walked `curator ui` end to end in an actual browser: memory browser showed real synced data under `src_github`; Review Queue rendered its correct empty state (confirms the earlier `supported:true` fix works visually, not just via curl); Forget console preview → confirm → deletion was human-driven and verified gone on reload — **B1 fully closed, not just via MCP tool calls**. Also confirmed via direct authenticated request that `GET /v3/connections` genuinely 404s — **Curator's core positioning claim is now verified, not assumed**. |
 | `feat: genuine zero-config on localhost (verify-first, then build)` | The original "zero-config, no secrets to paste" claim (`docs/plan.md` §3) didn't hold up in practice — `~/.supermemory/env` never held the Supermemory key, only the LLM provider key, and the real key is boot-generated with nowhere to auto-discover it from. Rather than assume the fix, the safety claim was verified FIRST: a real unauthenticated `POST /v4/profile` (no Authorization header at all) against `localhost:6767` returned a genuine `200` with correct data, matching the server's own boot-banner self-description. Only then: `config.ts` gained `isLocalhost()` (strict hostname match — `localhost`/`127.0.0.1`/`[::1]` only, via `new URL().hostname`, never a substring check, so `localhost.evil.com` or a LAN IP can never qualify) and `resolveConfig` now returns `apiKey: undefined` instead of throwing when no key is found on a local `baseUrl`. `client.ts` omits the Authorization header entirely in that case (never sends `Bearer undefined`). **Re-verified end-to-end after the code change**, in a shell with zero credentials configured anywhere: `curator status` reported reachable, and a full `remember`→`recall` round trip succeeded through the real MCP server against the real running binary. The zero-config promise is now actually true for localhost, the default and common case. 12 new tests (strict hostname matching including 7 rejected lookalikes, header omission, config resolution on both branches). |
+| `feat: console restyle + memory graph` (7 commits, `feat/console-graph`) | Console rebuilt to visually match Supermemory's own hosted dashboard, plus the memory-graph embed (previously cut line 1, now built). New `ops.listDocuments()` (`POST /v3/documents/list`) and pure-function `buildGraphDocuments()` join real documents with their memories via `documentIds[0]` (unmatched memories bucket into a synthetic "Ungrouped" node), exposed via a new `GET /api/graph?tag=` route. Tailwind v3 + self-hosted fonts (`@fontsource/inter`/`space-grotesk`/`jetbrains-mono`, no CDN) added as the visual system; `MemoryBrowser`/`ReviewQueue`/`ForgetConsole` restyled with zero behavior change (all data-testids and conditional branches preserved). New `GraphView` component renders the official `@supermemory/memory-graph` (MIT, Supermemory's own package) full-bleed, no `<Card>` chrome; its canvas/d3-force internals are mocked in tests via a top-of-file `vi.mock` so only Curator's own fetch/loading/error wrapper is exercised. `App.tsx` restructured from one scrolling page into a tabbed shell (Memories / Review (conditional on backend support) / Forget / Graph). **Live-verified 2026-07-17** against the real server: the `containerTags` filter on `/v3/documents/list` (previously UNVERIFIED, marked deprecated/hidden in the endpoint's own spec entry) was confirmed to genuinely filter via a real A/B request across two container tags; `/api/graph` was confirmed to return correctly joined real data (12 `src_github` documents, each with real memory nodes); and a human browser walkthrough confirmed the graph tab renders real nodes/edges with working pan/zoom/fit controls, and all four tabs render with the dark restyle — see `docs/api-verification.md` §14. Built via subagent-driven-development (fresh implementer + reviewer per task, 8 tasks, zero Critical/Important findings across all task reviews). 16 new tests. |
 
-**Total: 23 commits, 139 passing tests across 15 test files, clean `tsc --noEmit` and `vite build`.**
+**Total: 31 commits, 155 passing tests across 16 test files, clean `tsc --noEmit` and `vite build`.**
 
 ---
 
 ## What works right now (verified against a real running Supermemory Local server)
 
 - `pnpm build` — compiles the CLI/backend cleanly. `pnpm run build:ui` — builds the console SPA.
-- `pnpm test` — 120 tests green.
+- `pnpm test` — 155 tests green.
 - `node dist/cli.js status` against the real server reports `Server: reachable (HTTP 200)`.
 - **A2/A3 fully closed, live, not mocked:** `remember` stored a fact, the server's extraction
   pipeline distilled and enriched it with inferred `temporalContext`; `recall` found it by semantic
@@ -70,6 +74,13 @@ persistent env var instead of a file). See "What's NOT done" for the one remaini
 - **B1 (console) fully closed, in an actual browser:** memory browser shows real synced data;
   Review Queue renders (confirmed real, not absent — see below); Forget console's preview → confirm
   → gone loop was human-driven through the real UI and verified against the live server.
+- **Console restyle + memory graph, live-verified 2026-07-17:** the console is now a dark, tabbed
+  UI (Memories/Review/Forget/Graph) matching Supermemory's own hosted dashboard, with self-hosted
+  fonts (works fully offline). The Graph tab renders the official `@supermemory/memory-graph`
+  package against real data from a new `GET /api/graph?tag=` route — human-confirmed in a real
+  browser: real document/memory nodes and edges rendered, Fit/Center/zoom controls present and
+  functional, Legend present. The `containerTags` filter on `/v3/documents/list` (previously
+  UNVERIFIED) was confirmed live via a real A/B request. See `docs/api-verification.md` §14.
 - **Review queue is real, not absent:** `GET /api/review` returns `{supported:true, memories:[],
   total:0}` against the real server, confirmed both by direct request and by rendering correctly
   in the browser (currently empty — nothing has been passively inferred at low confidence yet,
@@ -88,8 +99,14 @@ persistent env var instead of a file). See "What's NOT done" for the one remaini
   nothing has been passively inferred at low confidence.
 - **C1 (raw-sync idempotency)** was deliberately skipped in favor of proving the write path via the
   agentic flow directly, which is a strictly harder/more complete test that already passed.
-- The memory-graph embed (`@supermemory/memory-graph`) is deferred — cut line 1, never started.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
+- **Graph tab's node click-to-detail popover and canvas drag/pan interaction** were not explicitly
+  exercised during live verification (a static screenshot confirmed the controls render and are
+  present, but an interactive click/drag was not performed) — low risk, since this interaction
+  surface belongs entirely to the upstream `@supermemory/memory-graph` package, not Curator's code.
+- **The synthetic "Ungrouped" bucket in `buildGraphDocuments`** has no live confirmation — the real
+  `src_github` dataset used for verification had every memory's `documentIds[0]` matching a real
+  document, so this path is proven only by Task 2's unit tests, not a live run.
 - **Operational note, not a code gap:** if `supermemory-server` is ever launched from a directory
   Curator also reads credentials from (as happened here — both landed at `~/.supermemory`), the
   server may treat a plaintext `env` file it finds there as a secret to encrypt. Use a persistent
