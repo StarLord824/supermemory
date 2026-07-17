@@ -6,6 +6,7 @@ import { resolveConfig, type CuratorConfig } from "../config.js";
 import {
   forgetById,
   forgetByPrompt,
+  listContainerTags,
   listDocuments,
   listEntriesWithHistory,
   listInferred,
@@ -107,6 +108,11 @@ export function createUiRequestHandler(deps: UiServerDeps) {
         return sendJson(res, 200, {
           documents: buildGraphDocuments(documents.memories, entries.memoryEntries),
         });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/tags") {
+        const result = await listContainerTags(deps.config);
+        return sendJson(res, 200, result);
       }
 
       if (req.method === "GET" && url.pathname === "/api/review") {

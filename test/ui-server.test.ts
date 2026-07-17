@@ -76,6 +76,31 @@ describe("GET /api/memories", () => {
   });
 });
 
+describe("GET /api/tags", () => {
+  it("delegates to ops.listContainerTags with no containerTags filter", async () => {
+    const fetchMock = mockSupermemoryFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        memories: [
+          { id: "d1", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["src_github"] },
+        ],
+        pagination: { currentPage: 1, totalItems: 1, totalPages: 1 },
+      }),
+    }));
+    await startTestServer();
+
+    const res = await realFetch(`${baseUrl}/api/tags`);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    const [smCall] = supermemoryCalls(fetchMock);
+    expect(smCall[0]).toBe("http://localhost:6767/v3/documents/list");
+    expect(JSON.parse((smCall[1] as RequestInit).body as string)).toEqual({ limit: 200, page: 1 });
+    expect(body.tags).toEqual([{ tag: "src_github", documentCount: 1 }]);
+  });
+});
+
 describe("GET /api/review", () => {
   it("returns supported:true with results when the endpoint works", async () => {
     mockSupermemoryFetch(() => ({
