@@ -1,10 +1,17 @@
+vi.mock("@supermemory/memory-graph", () => ({
+  MemoryGraph: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="mock-memory-graph">{children}</div>
+  ),
+}));
+
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MemoryBrowser } from "../src/ui/app/src/components/MemoryBrowser.js";
 import { ReviewQueue } from "../src/ui/app/src/components/ReviewQueue.js";
 import { ForgetConsole } from "../src/ui/app/src/components/ForgetConsole.js";
+import { GraphView } from "../src/ui/app/src/components/GraphView.js";
 import { Badge, Card, TabBar } from "../src/ui/app/src/components/ui.js";
 
 function loadFixture<T>(name: string): T {
@@ -140,5 +147,15 @@ describe("ui primitives", () => {
     expect(html).toContain("Memories");
     expect(html).toContain("Graph");
     expect(html).toContain('aria-selected="true"');
+  });
+});
+
+describe("GraphView", () => {
+  it("renders its container and passes an empty-state child to the graph", () => {
+    const html = renderToStaticMarkup(<GraphView tag="src_github" />);
+
+    expect(html).toContain("graph-view");
+    expect(html).toContain("mock-memory-graph");
+    expect(html).toContain("No memories to graph");
   });
 });
