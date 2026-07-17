@@ -17,6 +17,7 @@ import { ForgetConsole } from "./components/ForgetConsole.js";
 import { ReviewQueue } from "./components/ReviewQueue.js";
 import { GraphView } from "./components/GraphView.js";
 import { HomeView } from "./components/HomeView.js";
+import { DocsView } from "./components/DocsView.js";
 import { Card, TabBar, TagPicker } from "./components/ui.js";
 
 const DEFAULT_TAG = "curator_default";
@@ -89,6 +90,7 @@ export function App() {
     ...(reviewSupported ? [{ id: "review", label: "Review" }] : []),
     { id: "forget", label: "Forget" },
     { id: "graph", label: "Graph" },
+    { id: "docs", label: "Docs" },
   ];
 
   // Changing the tag can retract review support out from under an open Review
@@ -145,6 +147,12 @@ export function App() {
       ) : null}
 
       {active === "graph" ? <GraphView tag={tag} /> : null}
+
+      {active === "docs" ? (
+        <Card title="Docs">
+          <DocsView />
+        </Card>
+      ) : null}
     </main>
   );
 }

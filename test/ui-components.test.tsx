@@ -13,6 +13,7 @@ import { ReviewQueue } from "../src/ui/app/src/components/ReviewQueue.js";
 import { ForgetConsole } from "../src/ui/app/src/components/ForgetConsole.js";
 import { GraphView } from "../src/ui/app/src/components/GraphView.js";
 import { HomeView } from "../src/ui/app/src/components/HomeView.js";
+import { DocsView } from "../src/ui/app/src/components/DocsView.js";
 import { Badge, Card, TabBar, TagPicker } from "../src/ui/app/src/components/ui.js";
 
 function loadFixture<T>(name: string): T {
@@ -195,6 +196,17 @@ describe("HomeView", () => {
   });
 });
 
+describe("DocsView", () => {
+  it("renders without crashing and documents the core commands and tools", () => {
+    const html = renderToStaticMarkup(<DocsView />);
+    expect(html).toContain("docs-view");
+    expect(html).toContain("curator tags");
+    expect(html).toContain("remember");
+    expect(html).toContain("forget");
+    expect(html).toContain("Dry-run by default");
+  });
+});
+
 describe("GraphView", () => {
   it("renders its container and passes an empty-state child to the graph", () => {
     const html = renderToStaticMarkup(<GraphView tag="src_github" />);
@@ -208,12 +220,13 @@ describe("GraphView", () => {
 import { App } from "../src/ui/app/src/App.js";
 
 describe("App tab shell", () => {
-  it("renders the tab bar with Home, Memories, Forget, and Graph tabs", () => {
+  it("renders the tab bar with Home, Memories, Forget, Graph, and Docs tabs", () => {
     const html = renderToStaticMarkup(<App />);
     expect(html).toContain("Home");
     expect(html).toContain("Memories");
     expect(html).toContain("Graph");
     expect(html).toContain("Forget");
+    expect(html).toContain("Docs");
   });
 
   it("does not render a Review tab before the backend confirms support", () => {
