@@ -6,11 +6,13 @@ import { resolveConfig, type CuratorConfig } from "../config.js";
 import {
   forgetById,
   forgetByPrompt,
+  listDocuments,
   listEntriesWithHistory,
   listInferred,
   reviewInferred,
   type ReviewAction,
 } from "../supermemory/ops.js";
+import { buildGraphDocuments } from "./graph.js";
 
 const DEFAULT_CONTAINER_TAG = "curator_default";
 const DEFAULT_STATIC_ROOT = fileURLToPath(new URL("./app", import.meta.url));
@@ -94,6 +96,17 @@ export function createUiRequestHandler(deps: UiServerDeps) {
         const tag = url.searchParams.get("tag") ?? DEFAULT_CONTAINER_TAG;
         const result = await listEntriesWithHistory(deps.config, [tag]);
         return sendJson(res, 200, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/graph") {
+        const tag = url.searchParams.get("tag") ?? DEFAULT_CONTAINER_TAG;
+        const [documents, entries] = await Promise.all([
+          listDocuments(deps.config, tag),
+          listEntriesWithHistory(deps.config, [tag]),
+        ]);
+        return sendJson(res, 200, {
+          documents: buildGraphDocuments(documents.memories, entries.memoryEntries),
+        });
       }
 
       if (req.method === "GET" && url.pathname === "/api/review") {

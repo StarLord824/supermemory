@@ -156,6 +156,65 @@ describe("POST /api/review/:id", () => {
   });
 });
 
+describe("GET /api/graph", () => {
+  it("joins /v3/documents/list and /v4/memories/list into graph documents", async () => {
+    const fetchMock = mockSupermemoryFetch((url) => {
+      if (url.endsWith("/v3/documents/list")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            memories: [
+              { id: "doc_1", title: "PR #171", summary: "s", status: "done", type: "text", createdAt: "t", updatedAt: "t" },
+            ],
+            pagination: { currentPage: 1, totalItems: 1, totalPages: 1 },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          memoryEntries: [
+            {
+              id: "mem_1", memory: "m", version: 1, isLatest: true, isForgotten: false,
+              isStatic: false, isInference: false, createdAt: "t", updatedAt: "t",
+              spaceId: "space_1", orgId: "org_1", sourceCount: 1, parentMemoryId: null,
+              rootMemoryId: "mem_1", forgetAfter: null, forgetReason: null, metadata: null,
+              memoryRelations: null, temporalContext: null, history: [], documentIds: ["doc_1"],
+            },
+          ],
+          pagination: { currentPage: 1, totalItems: 1, totalPages: 1 },
+        }),
+      };
+    });
+    await startTestServer();
+
+    const res = await realFetch(`${baseUrl}/api/graph?tag=src_github`);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.documents).toHaveLength(1);
+    expect(body.documents[0].id).toBe("doc_1");
+    expect(body.documents[0].documentType).toBe("text");
+    expect(body.documents[0].memories[0].id).toBe("mem_1");
+
+    const calledPaths = supermemoryCalls(fetchMock).map(([url]) => url);
+    expect(calledPaths).toContain("http://localhost:6767/v3/documents/list");
+    expect(calledPaths).toContain("http://localhost:6767/v4/memories/list");
+  });
+
+  it("returns 500 with an error message when Supermemory fails", async () => {
+    mockSupermemoryFetch(() => ({ ok: false, status: 500, text: async () => "boom" }));
+    await startTestServer();
+
+    const res = await realFetch(`${baseUrl}/api/graph?tag=src_github`);
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain("Supermemory request failed");
+  });
+});
+
 describe("unknown routes", () => {
   it("returns 404", async () => {
     await startTestServer();
