@@ -264,7 +264,8 @@ Tabs:
 - **Graph** — renders the official `@supermemory/memory-graph` React component (MIT-licensed,
   Supermemory's own package — credited, not reimplemented) full-bleed with no title chrome.
   Documents from the active container tag are graph nodes, each with its own memories nested as
-  child nodes; click a node for its detail popover. Backed by a new `GET /api/graph?tag=` route
+  child nodes; click a node for its detail popover (upstream component behavior). Backed by a new
+  `GET /api/graph?tag=` route
   that joins `POST /v3/documents/list` (real document titles) with `POST /v4/memories/list` (real
   memories) via each memory's `documentIds[0]`; memories with no matching document bucket into a
   synthetic "Ungrouped" node rather than being dropped. Live-verified 2026-07-17 against a real

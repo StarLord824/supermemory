@@ -1,6 +1,12 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // `relative: true` resolves these from THIS file's directory. Without it
+  // Tailwind resolves from process.cwd() (the repo root, since that's where
+  // vite runs), which silently misses ./index.html and scans the backend tree.
+  content: {
+    relative: true,
+    files: ["./index.html", "./src/**/*.{ts,tsx}"],
+  },
   theme: {
     extend: {
       colors: {

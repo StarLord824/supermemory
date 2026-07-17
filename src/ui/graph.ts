@@ -62,8 +62,9 @@ function toGraphMemory(entry: MemoryEntryWithHistory): GraphApiMemory {
  * Grouping rule: a memory belongs to its FIRST documentIds entry. Memories
  * whose document is missing (or that have no documentIds at all) go into a
  * synthetic "Ungrouped" document rather than being silently dropped —
- * defensive, since /v3/documents/list's containerTags filter is unverified
- * and might return a narrower set than the memories reference.
+ * defensive: a memory can reference a document the documents list didn't
+ * return. (The containerTags filter is confirmed working — see
+ * docs/api-verification.md §14 — so this guard is belt-and-braces.)
  * Documents with no memories are omitted so the graph has no empty nodes.
  */
 export function buildGraphDocuments(

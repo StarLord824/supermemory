@@ -78,6 +78,10 @@ export function App() {
     { id: "graph", label: "Graph" },
   ];
 
+  // Changing the tag can retract review support out from under an open Review
+  // tab; fall back rather than strand a panel with no corresponding tab.
+  const active = tabs.some((t) => t.id === activeTab) ? activeTab : "memories";
+
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -94,22 +98,22 @@ export function App() {
       </header>
 
       <div className="mb-6">
-        <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        <TabBar tabs={tabs} active={active} onChange={setActiveTab} />
       </div>
 
-      {activeTab === "memories" ? (
+      {active === "memories" ? (
         <Card title="Memories">
           <MemoryBrowser tag={tag} memories={memories} loading={loadingMemories} />
         </Card>
       ) : null}
 
-      {activeTab === "review" ? (
+      {active === "review" ? (
         <Card title="Review queue">
           <ReviewQueue supported={reviewSupported} items={reviewItems} onAction={handleReviewAction} />
         </Card>
       ) : null}
 
-      {activeTab === "forget" ? (
+      {active === "forget" ? (
         <Card title="Forget">
           <ForgetConsole
             query={forgetQuery}
@@ -123,7 +127,7 @@ export function App() {
         </Card>
       ) : null}
 
-      {activeTab === "graph" ? <GraphView tag={tag} /> : null}
+      {active === "graph" ? <GraphView tag={tag} /> : null}
     </main>
   );
 }

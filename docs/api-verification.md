@@ -474,9 +474,10 @@ worth rechecking if a future sync produces an orphaned memory.
 in the running console (`http://localhost:4141`):
 - **Graph tab:** the `@supermemory/memory-graph` canvas rendered real document nodes (square icons)
   and memory nodes (hexagons) connected by edges, matching the confirmed `/api/graph` response
-  shape. The Fit / Center / zoom-% controls and a collapsible Legend were present and functional,
-  confirming the real (non-mocked) package resolved and initialized correctly in the production
-  build — not just in Task 6's mocked unit tests.
+  shape. The Fit / Center / zoom-% controls and a collapsible Legend were present and rendered
+  (see the caveat below — they were not clicked). The nodes being laid out via real force-directed
+  positioning confirms the real (non-mocked) package resolved and initialized correctly in the
+  production build — not just in Task 6's mocked unit tests.
 - **Memories tab:** rendered the real list of `src_github` memories with the dark restyle.
 - **Review tab:** present (confirms `reviewSupported: true` on this server, per §7) and showed its
   correct empty state ("No inferred memories awaiting review").
