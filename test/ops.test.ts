@@ -4,6 +4,7 @@ import {
   forgetById,
   forgetByPrompt,
   getProfile,
+  listContainerTags,
   listDocuments,
   listEntriesWithHistory,
   listInferred,
@@ -18,6 +19,15 @@ const config: CuratorConfig = { apiKey: "sm_test_key", baseUrl: "http://localhos
 
 function mockFetchOnce(response: { ok: boolean; status: number; json?: () => Promise<unknown>; text?: () => Promise<string> }) {
   const fetchMock = vi.fn().mockResolvedValue(response);
+  global.fetch = fetchMock as unknown as typeof fetch;
+  return fetchMock;
+}
+
+function mockFetchSequence(
+  responses: Array<{ ok: boolean; status: number; json?: () => Promise<unknown>; text?: () => Promise<string> }>,
+) {
+  const fetchMock = vi.fn();
+  for (const response of responses) fetchMock.mockResolvedValueOnce(response);
   global.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
 }
@@ -145,6 +155,85 @@ describe("ops (all calls go through rawRequest against confirmed live paths)", (
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ containerTags: ["src_github"], limit: 200 }));
       expect(result.memories[0].title).toBe("PR #171");
+    });
+  });
+
+  describe("listContainerTags", () => {
+    it("derives tags from /v3/documents/list with NO containerTags filter, deduping and counting", async () => {
+      const fetchMock = mockFetchOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          memories: [
+            { id: "d1", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["src_github"] },
+            { id: "d2", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["src_github"] },
+            { id: "d3", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["curator_default"] },
+          ],
+          pagination: { currentPage: 1, totalItems: 3, totalPages: 1 },
+        }),
+      });
+
+      const result = await listContainerTags(config);
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("http://localhost:6767/v3/documents/list");
+      expect(JSON.parse(init.body)).toEqual({ limit: 200, page: 1 });
+      expect(result.tags).toEqual([
+        { tag: "curator_default", documentCount: 1 },
+        { tag: "src_github", documentCount: 2 },
+      ]);
+    });
+
+    it("pages through multiple pages and merges results", async () => {
+      const fetchMock = mockFetchSequence([
+        {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            memories: [
+              { id: "d1", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["a"] },
+            ],
+            pagination: { currentPage: 1, totalItems: 2, totalPages: 2 },
+          }),
+        },
+        {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            memories: [
+              { id: "d2", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["b"] },
+            ],
+            pagination: { currentPage: 2, totalItems: 2, totalPages: 2 },
+          }),
+        },
+      ]);
+
+      const result = await listContainerTags(config);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const [, secondInit] = fetchMock.mock.calls[1];
+      expect(JSON.parse(secondInit.body)).toEqual({ limit: 200, page: 2 });
+      expect(result.tags).toEqual([
+        { tag: "a", documentCount: 1 },
+        { tag: "b", documentCount: 1 },
+      ]);
+    });
+
+    it("stops at a safety cap of 10 pages even if the server reports more", async () => {
+      const fetchMock = mockFetchOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          memories: [
+            { id: "d1", title: "t", summary: null, status: "done", type: "text", createdAt: "t", updatedAt: "t", containerTags: ["a"] },
+          ],
+          pagination: { currentPage: 1, totalItems: 999, totalPages: 999 },
+        }),
+      });
+
+      await listContainerTags(config);
+
+      expect(fetchMock).toHaveBeenCalledTimes(10);
     });
   });
 

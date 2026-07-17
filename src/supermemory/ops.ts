@@ -287,6 +287,7 @@ export interface DocumentRecord {
   url?: string | null;
   connectionId?: string | null;
   metadata?: Record<string, unknown> | null;
+  containerTags?: string[];
 }
 
 export interface ListDocumentsResult {
@@ -317,6 +318,52 @@ export async function listDocuments(
     method: "POST",
     body: { containerTags: [containerTag], limit: 200 },
   });
+}
+
+export interface ContainerTagSummary {
+  tag: string;
+  documentCount: number;
+}
+
+export interface ListContainerTagsResult {
+  tags: ContainerTagSummary[];
+}
+
+// Self-imposed safety bound, not a server-confirmed limit: caps how many
+// /v3/documents/list pages this will walk while deriving the tag set, so a
+// very large install can't turn one call into an unbounded loop.
+const MAX_TAG_DISCOVERY_PAGES = 10;
+
+// SOURCE: same endpoint as listDocuments (POST /v3/documents/list, confirmed
+// §14) called with NO containerTags filter — confirmed live 2026-07-17 to
+// return documents across every tag, each carrying its own containerTags[].
+// There is no dedicated "list container tags" endpoint (GET /v3/container-tags
+// returns 404 — confirmed live); this derives the tag set by paging through
+// every document instead. See docs/api-verification.md §15.
+export async function listContainerTags(config: CuratorConfig): Promise<ListContainerTagsResult> {
+  const counts = new Map<string, number>();
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const result = await rawRequest<ListDocumentsResult>(config, "/v3/documents/list", {
+      method: "POST",
+      body: { limit: 200, page },
+    });
+    for (const doc of result.memories) {
+      for (const tag of doc.containerTags ?? []) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    totalPages = result.pagination.totalPages;
+    page += 1;
+  } while (page <= totalPages && page <= MAX_TAG_DISCOVERY_PAGES);
+
+  const tags = [...counts.entries()]
+    .map(([tag, documentCount]) => ({ tag, documentCount }))
+    .sort((a, b) => a.tag.localeCompare(b.tag));
+
+  return { tags };
 }
 
 export interface InferredMemory {
