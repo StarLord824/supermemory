@@ -106,6 +106,27 @@ Server: reachable (HTTP 200)
 Exit code 1 (with a pointer to the WSL guide) when the server is down. Use this as the first
 diagnostic for any "nothing works" situation.
 
+## 3b. `curator tags` — list container tags
+
+```bash
+curator tags
+```
+
+Prints every container tag found in Supermemory Local, with a document count, alphabetically:
+
+```
+TAG           DOCUMENTS
+curator_test  2
+src_github    12
+```
+
+There is **no native "list tags" endpoint** on the local binary (`GET /v3/container-tags` returns
+404, confirmed live). This list is **derived**: `ops.listContainerTags` pages through
+`POST /v3/documents/list` with no `containerTags` filter — which returns documents across every
+tag, each carrying its own `containerTags[]` — dedupes, and counts (see `docs/api-verification.md`
+§15). Use it to discover what to pass to `--containerTag` / the MCP tools / the console's tag
+picker, instead of guessing a tag name blind.
+
 ## 4. `curator mcp` — the MCP server (Component A)
 
 Stdio MCP server exposing exactly four tools, targeting the local binary directly — no cloud, no
@@ -249,7 +270,14 @@ reaches the browser**. The console is a dark, tabbed UI with self-hosted fonts (
 Grotesk, JetBrains Mono via `@fontsource/*` — no Google Fonts CDN, works fully offline), styled to
 match Supermemory's own hosted dashboard.
 
+The header's container-tag field is a **search+dropdown** (native `<input list>` + `<datalist>`,
+backed by `GET /api/tags`): it suggests the tags that actually exist as you type, but still accepts
+free-typing a tag not in the list (so a fresh install with no data yet isn't locked out).
+
 Tabs:
+- **Home** — an overview dashboard: a short welcome blurb plus live stats (container tags found,
+  memory count for the active tag, whether the Review queue is supported on this server). The
+  default tab.
 - **Memories** — memories per container tag, `isLatest`/superseded badges, and real version-chain
   relations (`updates`/`extends`/`derives`, confirmed present on Local) where the API returns them.
 - **Review** — approve/decline/undo low-confidence inferred memories. **Confirmed live and
@@ -270,12 +298,15 @@ Tabs:
   memories) via each memory's `documentIds[0]`; memories with no matching document bucket into a
   synthetic "Ungrouped" node rather than being dropped. Live-verified 2026-07-17 against a real
   12-document `src_github` dataset — see `docs/api-verification.md` §14.
+- **Docs** — an in-app quick reference (CLI commands, MCP tools, one line per console tab, and the
+  dry-run safety note). Static, hand-written — no live fetch.
 
 API routes (all delegating to `src/supermemory/ops.ts`): `GET /api/memories?tag=` (proxies
 `POST /v4/memories/list`, response field `memoryEntries`), `GET /api/review?tag=`,
 `POST /api/review/:id {action}`, `POST /api/forget {target, mode, dryRun}` (dry-run defaults true
 here too, overriding the server's own unsafe `false` default), `GET /api/graph?tag=` (proxies and
-joins `POST /v3/documents/list` + `POST /v4/memories/list`, see §14).
+joins `POST /v3/documents/list` + `POST /v4/memories/list`, see §14), `GET /api/tags` (derives the
+container-tag list from `POST /v3/documents/list`, see §15).
 
 ## 10. Verification status — read before trusting
 

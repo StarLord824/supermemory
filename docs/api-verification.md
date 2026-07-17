@@ -488,3 +488,61 @@ popover, and pan/zoom drag interaction (the static screenshot confirms the contr
 graph is laid out via force-directed positioning, but an interactive drag/click was not performed
 during this verification). Low risk — this interaction surface belongs entirely to the upstream
 `@supermemory/memory-graph` package, not to Curator's own code.
+
+## 15. Container tag discovery (2026-07-17)
+
+Live-verified against the same running `supermemory-server` v0.0.5 / WSL2 instance as §12–§14,
+after a server restart (same data dir, same key). The dataset had grown slightly from §14: 14
+documents total across two tags (`src_github` and `curator_test`) — the extra `curator_test`
+documents are from earlier live-verification bootstrap memories.
+
+**No native "list container tags" endpoint — CONFIRMED absent.**
+```
+curl -s -o /dev/null -w "%{http_code}" http://localhost:6767/v3/container-tags  →  404
+```
+As with §7's lesson, this was checked with a **direct request**, not inferred from the spec's path
+list. `GET /v3/container-tags/{tag}` (singular) does return metadata for one *already-known* tag
+(confirmed `200` for `src_github` earlier this session), but it cannot enumerate tags you don't
+already know. So the tag set has to be derived.
+
+**`POST /v3/documents/list` with NO `containerTags` filter returns documents across every tag —
+CONFIRMED.** An unfiltered call returns documents tagged with different container tags in one
+response, each carrying its own `containerTags: string[]`:
+```
+POST /v3/documents/list {"limit":5,"page":1}
+  → pagination: {"currentPage":1,"limit":5,"totalItems":14,"totalPages":3}
+  → sample containerTags: [["curator_test"],["src_github"],["src_github"],["src_github"],["src_github"]]
+```
+This is the mechanism `ops.listContainerTags` uses: page through every document with no filter,
+dedupe each document's `containerTags[]`, and count documents per tag. Pagination via `{limit,
+page}` is confirmed real (`totalPages: 3` at `limit: 5` above); `listContainerTags` uses `limit:
+200` and caps at a self-imposed 10-page safety bound (a Curator-side guard, not a server limit).
+
+**`curator tags` CLI — CONFIRMED end-to-end.** Against the live server:
+```
+$ node dist/cli.js tags
+TAG           DOCUMENTS
+curator_test  2
+src_github    12
+```
+Real tags, real counts, alphabetically sorted, column-aligned.
+
+**`GET /api/tags` route — CONFIRMED end-to-end.** With `curator ui` running:
+```
+$ curl -s http://localhost:4141/api/tags
+{"tags":[{"tag":"curator_test","documentCount":2},{"tag":"src_github","documentCount":12}]}
+```
+Identical data to the CLI, confirming the route, `listContainerTags`, and the SPA backend all
+agree.
+
+**Browser walkthrough — human-confirmed, 2026-07-17.** In the running console:
+- **Home tab** is the default active tab, showing the Overview card with three live stats:
+  "Container tags found: 2", "Memories under \"src_github\": 10", "Review queue: Supported" — all
+  matching the live API data.
+- **Container tag field** is now a search+dropdown (native `<input list>` + `<datalist>`): typing
+  suggests the known tags, and free-typing a tag not in the list is still accepted (per design, so
+  a fresh install with no data yet isn't locked out).
+- **Memories / Review / Forget / Graph** tabs all still render correctly — no regression from the
+  tab-shell changes.
+- **Docs tab** renders the in-app reference (CLI commands, MCP tools, console-tab descriptions,
+  including the "forget: Dry-run by default" safety note).
