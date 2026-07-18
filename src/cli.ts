@@ -1,12 +1,25 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import gradient from "gradient-string";
+import pc from "picocolors";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { describeApiKey, resolveConfig } from "./config.js";
 import { createMcpServer } from "./mcp/server.js";
 
 const program = new Command();
 
+// Same blue→purple family as the console's accent colors and the
+// interactive menu's intro banner (src/interactive.ts) — one consistent
+// visual identity across CLI, console, and interactive mode. Curator is a
+// companion layer, not a fork or a competing product, so the banner always
+// names Supermemory Local explicitly rather than standing alone.
+const brandGradient = gradient("#3b82f6", "#a855f7");
+function brandBanner(): string {
+  return `${brandGradient("Curator")} ${pc.dim("— a companion layer for Supermemory Local (localhost:6767)")}`;
+}
+
 program.name("curator").description("MCP server, governance console, and agentic sources for Supermemory Local");
+program.addHelpText("beforeAll", `${brandBanner()}\n`);
 
 program
   .command("mcp")
@@ -28,6 +41,7 @@ program
   .description("Print resolved (redacted) configuration and probe the Supermemory Local server")
   .action(async () => {
     try {
+      console.log(brandBanner());
       const config = resolveConfig();
       console.log(`Supermemory base URL: ${config.baseUrl}`);
       console.log(`API key: ${describeApiKey(config.apiKey)}`);
