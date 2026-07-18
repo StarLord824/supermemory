@@ -111,6 +111,13 @@ persistent env var instead of a file). See "What's NOT done" for the one remaini
   binary not producing the input the endpoint acts on.
 - **C1 (raw-sync idempotency)** was deliberately skipped in favor of proving the write path via the
   agentic flow directly, which is a strictly harder/more complete test that already passed.
+- **`agy` agentic sync is currently broken — a confirmed upstream regression, not a Curator bug.**
+  `agy` was live-verified working end-to-end at v1.1.1 (§11); the currently-installed v1.1.3 no
+  longer loads MCP servers in print mode at all (confirmed via zero child-process spawns and zero
+  MCP-related log lines during a run that explicitly asked it to list its tools — see
+  `docs/api-verification.md` §17). No workaround was found in agy's current CLI surface, and it has
+  no version-pinning option to roll back to 1.1.1. **`claude` remains the reliable default runtime
+  for `curator sync`** — unaffected, still fully verified.
 - GitHub is the only wired-up Coral source for `sync --raw`; Linear/Slack/etc. are documented but not implemented in the mapping/raw-sync path.
 - **Graph tab's node click-to-detail popover and canvas drag/pan interaction** were not explicitly
   exercised during live verification (a static screenshot confirmed the controls render and are

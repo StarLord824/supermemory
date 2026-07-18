@@ -571,3 +571,50 @@ above: `DELETE /v3/documents/Z72J16w19m8k38EwL3qeQM` returned `204`, and a follo
 document's extracted memories. (This endpoint was previously listed in §12 as "available but not
 used by Curator"; now at least confirmed functional.) The curated demo tags were verified untouched
 afterward (`curator tags` still showed `curator_test`:2, `src_github`:12).
+
+## 17. REGRESSION: agy's MCP loading is broken in print mode as of 1.1.3 (2026-07-18)
+
+**§11 verified `agy 1.1.1` end-to-end with real Coral MCP data. That is no longer true on the
+currently-installed `agy 1.1.3`.** This is an upstream regression in the agy binary itself, not a
+bug in Curator's own code — `writeAgyMcpConfig` still writes exactly the file/schema that worked
+before.
+
+**Reproduction, this session:**
+- `agy -p "<prompt>" --dangerously-skip-permissions` runs fine and returns real model output (basic
+  invocation, flags, and Node's `spawn()` are all unaffected).
+- `~/.gemini/antigravity-cli/mcp_config.json` (the file `writeAgyMcpConfig` maintains) is present,
+  valid JSON, with both `coral` (absolute exe path) and `curator` (absolute `node ... mcp` path)
+  entries — confirmed by reading the file directly.
+- Asked agy directly, in print mode: *"List every MCP tool you can call right now, by name only...
+  If you have none, reply exactly: NO_MCP_TOOLS"* → agy replied `NO_MCP_TOOLS`.
+- **Decisive test:** re-ran that same prompt while polling `Get-Process` every 3 seconds for the
+  run's duration. Only the `agy` process itself ever existed — **`coral.exe` and `node` were never
+  spawned**, for the entire run. Cross-checked against agy's own `cli.log` for that run: zero lines
+  mention "mcp" anywhere (case-insensitive grep across the whole file), despite the prompt
+  explicitly asking it to enumerate MCP tools.
+- **Conclusion:** agy 1.1.3's print mode does not attempt to start configured MCP servers at all —
+  it isn't a connection failure or a misconfigured path, the subprocess spawn simply never happens.
+
+**Not the cause, but noted along the way:** the same `cli.log` also showed a real, unrelated
+Windows path bug — an internal transcript-logging path is constructed as
+`/Users/MY NOTEBOOK/.gemini/antigravity-cli/brain/<conversation-id>/.system_generated/logs/transcript.jsonl`
+(Unix-style, no drive letter) on every run, failing with "The system cannot find the path
+specified." `HOME`/`USERPROFILE` were both confirmed correctly set to the Windows-style
+`C:\Users\MY NOTEBOOK`, so this isn't an environment misconfiguration on this machine — it's
+internal to the agy binary. This didn't block the print-mode reply itself (transcript logging is
+best-effort), and no log evidence ties it to the MCP-loading gap specifically, but it's recorded
+here as further evidence of rough edges in this agy release on Windows.
+
+**No workaround found within agy's current CLI surface:**
+- `agy --help` has no MCP-related flag or subcommand (no `--mcp-config`, no `mcp` subcommand).
+- `agy plugin list` → "No imported plugins"; the `plugin import [gemini|claude]` mechanism exists
+  but is unconfigured and untested here — a possible new intended path for external tools in this
+  agy version, not yet investigated.
+- `agy update`/`agy install --help` expose no version-pinning flag, so there is no supported way to
+  roll back to the previously-verified 1.1.1 via agy's own CLI.
+
+**Practical implication for Curator:** `curator sync --agent agy` cannot currently reach Coral or
+write to Supermemory via MCP — the agent runs but has no tools. **`claude` remains the reliable
+default runtime for `curator sync`** (still fully verified per §11/§12). This is recorded here
+rather than fixed in code because there is nothing wrong in `src/sync/agent.ts` to fix — the
+config it writes is correct; the gap is entirely in agy's own headless-mode tool loading.
