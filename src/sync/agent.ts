@@ -268,6 +268,8 @@ export interface RunAgentSyncOptions {
    * routing GitHub issues into "src_github_issues", separate from PRs.
    */
   container?: string;
+  /** Overrides the default 5-minute agent timeout — large/active repos can need longer. */
+  timeoutMs?: number;
   /**
    * Review mode: the agent stages proposals to a local file instead of
    * writing to Supermemory. Preview them, then `curator sync --commit`.
@@ -307,17 +309,19 @@ export async function runAgentSyncCore(options: RunAgentSyncOptions): Promise<vo
   console.log(
     `Running sync agent (${runtime}) over sources: ${options.sources.join(", ")}${modeNote}`,
   );
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const { stdout, timedOut } = await spawnSyncAgent({
     prompt,
     mcpConfigPath,
     runtime,
+    timeoutMs,
     spawnFn: options.spawnFn,
   });
   const agentText = extractAgentText(runtime, stdout);
   console.log(agentText);
 
   if (timedOut) {
-    console.warn("Sync agent timed out after 5 minutes; cursor left unchanged.");
+    console.warn(`Sync agent timed out after ${Math.round(timeoutMs / 60_000)} minutes; cursor left unchanged.`);
     return;
   }
 
@@ -405,6 +409,8 @@ export interface RunAgentSyncCliOptions {
   runtime?: string;
   instruction?: string;
   container?: string;
+  /** Agent timeout in minutes — overrides the 5-minute default. */
+  timeoutMinutes?: number;
   review?: boolean;
   /**
    * Skip the auto-printed suggestion list. The interactive menu sets this
@@ -420,20 +426,23 @@ export interface RunAgentSyncCliOptions {
  * instruction from --instruction then CURATOR_INSTRUCTION; container from
  * --container then CURATOR_CONTAINER (overrides the default per-source
  * "src_{source}" tag so every memory this run stores lands in one fixed
- * container). When no instruction is given, a dimmed suggestion list is
- * shown before the run so the operator learns the steering vocabulary for
- * next time.
+ * container); timeout (minutes) from --timeout then CURATOR_TIMEOUT_MINUTES,
+ * overriding the 5-minute default — large/active repos can need longer. When
+ * no instruction is given, a dimmed suggestion list is shown before the run
+ * so the operator learns the steering vocabulary for next time.
  */
 export async function runAgentSync(options: RunAgentSyncCliOptions = {}): Promise<void> {
   const sources = (process.env.CURATOR_SOURCES ?? "github").split(",").map((s) => s.trim());
   const runtime = resolveAgentRuntime(options.runtime ?? process.env.CURATOR_AGENT);
   const instruction = options.instruction ?? process.env.CURATOR_INSTRUCTION;
   const container = options.container ?? process.env.CURATOR_CONTAINER;
+  const timeoutMinutesRaw = options.timeoutMinutes ?? Number(process.env.CURATOR_TIMEOUT_MINUTES);
+  const timeoutMs = Number.isFinite(timeoutMinutesRaw) && timeoutMinutesRaw > 0 ? timeoutMinutesRaw * 60_000 : undefined;
 
   if (!instruction && !options.suppressSuggestions) {
     const { formatSuggestions } = await import("./suggestions.js");
     console.log(`${formatSuggestions(sources)}\n`);
   }
 
-  await runAgentSyncCore({ sources, runtime, instruction, container, review: options.review });
+  await runAgentSyncCore({ sources, runtime, instruction, container, timeoutMs, review: options.review });
 }

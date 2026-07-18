@@ -35,6 +35,20 @@ function fakeSpawnFn(stdoutText: string) {
   return spawnFn;
 }
 
+/**
+ * A spawn that never emits "close" or "data" on its own — only the timeout
+ * firing (which calls kill()) ends the run, same as a real killed process
+ * eventually emitting "close".
+ */
+function hangingSpawnFn() {
+  const child = new FakeChildProcess();
+  child.kill = vi.fn(() => {
+    child.emit("close");
+  });
+  const spawnFn = vi.fn(() => child as unknown as ReturnType<typeof import("node:child_process").spawn>);
+  return { spawnFn, child };
+}
+
 describe("resolveAgentRuntime", () => {
   it("defaults to claude when unset", () => {
     expect(resolveAgentRuntime(undefined)).toBe("claude");
@@ -256,6 +270,30 @@ describe("runAgentSyncCore", () => {
 
     const args = spawnFn.mock.calls[0][1] as string[];
     expect(args.join(" ")).toContain('containerTag: "src_github_issues"');
+  });
+
+  it("honors a custom timeoutMs instead of the 5-minute default", async () => {
+    freshPaths();
+    vi.useFakeTimers();
+    try {
+      const { spawnFn, child } = hangingSpawnFn();
+
+      const runPromise = runAgentSyncCore({
+        sources: ["github"],
+        timeoutMs: 10_000,
+        statePath,
+        mcpConfigPath,
+        curatorCliPath: "/abs/dist/cli.js",
+        spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+      });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await runPromise;
+
+      expect(child.kill).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("spawns the agy runtime when selected", async () => {

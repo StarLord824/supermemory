@@ -64,6 +64,10 @@ program
     "Override the default per-source containerTag (src_{source}) so every memory this run stores lands in one fixed container. Falls back to CURATOR_CONTAINER",
   )
   .option(
+    "--timeout <minutes>",
+    "Override the 5-minute agent timeout — large/active repos can need longer. Falls back to CURATOR_TIMEOUT_MINUTES",
+  )
+  .option(
     "--review",
     "Stage the agent's proposed memories for human review instead of writing them; preview, then `curator sync --commit`",
   )
@@ -73,6 +77,7 @@ program
     agent?: string;
     instruction?: string;
     container?: string;
+    timeout?: string;
     review?: boolean;
     commit?: boolean;
   }) => {
@@ -103,6 +108,7 @@ program
         runtime: opts.agent,
         instruction: opts.instruction,
         container: opts.container,
+        timeoutMinutes: opts.timeout ? Number(opts.timeout) : undefined,
         review: opts.review,
       });
     } catch (err) {
