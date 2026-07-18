@@ -60,6 +60,10 @@ program
     "Free-text focus for the agent: what kind of data to pull and prioritize. Falls back to CURATOR_INSTRUCTION",
   )
   .option(
+    "--container <tag>",
+    "Override the default per-source containerTag (src_{source}) so every memory this run stores lands in one fixed container. Falls back to CURATOR_CONTAINER",
+  )
+  .option(
     "--review",
     "Stage the agent's proposed memories for human review instead of writing them; preview, then `curator sync --commit`",
   )
@@ -68,6 +72,7 @@ program
     raw?: boolean;
     agent?: string;
     instruction?: string;
+    container?: string;
     review?: boolean;
     commit?: boolean;
   }) => {
@@ -85,6 +90,9 @@ program
         if (opts.instruction) {
           console.warn("--instruction is ignored with --raw (raw sync runs a fixed query).");
         }
+        if (opts.container) {
+          console.warn("--container is ignored with --raw (raw sync uses the fixed src_{source} tag).");
+        }
         const { runRawSync } = await import("./sync/raw.js");
         await runRawSync();
         return;
@@ -94,6 +102,7 @@ program
       await runAgentSync({
         runtime: opts.agent,
         instruction: opts.instruction,
+        container: opts.container,
         review: opts.review,
       });
     } catch (err) {

@@ -250,6 +250,12 @@ export interface RunAgentSyncOptions {
   /** Free-text steer for what kind of data to pull/prioritize. */
   instruction?: string;
   /**
+   * Override the default per-source containerTag ("src_{source}") so every
+   * memory this run stores lands in one fixed container instead — e.g.
+   * routing GitHub issues into "src_github_issues", separate from PRs.
+   */
+  container?: string;
+  /**
    * Review mode: the agent stages proposals to a local file instead of
    * writing to Supermemory. Preview them, then `curator sync --commit`.
    */
@@ -269,7 +275,7 @@ export async function runAgentSyncCore(options: RunAgentSyncOptions): Promise<vo
   const runtime = options.runtime ?? "claude";
   const review = options.review ?? false;
   const cursor = getCursor(AGENT_SYNC_CURSOR_KEY, options.statePath) ?? EPOCH;
-  const prompt = buildSyncPrompt(cursor, options.sources, options.instruction);
+  const prompt = buildSyncPrompt(cursor, options.sources, options.instruction, options.container);
   const cliPath = options.curatorCliPath ?? process.argv[1] ?? "dist/cli.js";
 
   // In review mode the curator MCP server stages to this file instead of
@@ -385,6 +391,7 @@ export async function runCommit(options: RunCommitOptions = {}): Promise<{ commi
 export interface RunAgentSyncCliOptions {
   runtime?: string;
   instruction?: string;
+  container?: string;
   review?: boolean;
   /**
    * Skip the auto-printed suggestion list. The interactive menu sets this
@@ -397,19 +404,23 @@ export interface RunAgentSyncCliOptions {
 /**
  * CLI-facing entry point. Sources come from CURATOR_SOURCES (comma-separated,
  * default "github"); runtime from --agent then CURATOR_AGENT then "claude";
- * instruction from --instruction then CURATOR_INSTRUCTION. When no
- * instruction is given, a dimmed suggestion list is shown before the run so
- * the operator learns the steering vocabulary for next time.
+ * instruction from --instruction then CURATOR_INSTRUCTION; container from
+ * --container then CURATOR_CONTAINER (overrides the default per-source
+ * "src_{source}" tag so every memory this run stores lands in one fixed
+ * container). When no instruction is given, a dimmed suggestion list is
+ * shown before the run so the operator learns the steering vocabulary for
+ * next time.
  */
 export async function runAgentSync(options: RunAgentSyncCliOptions = {}): Promise<void> {
   const sources = (process.env.CURATOR_SOURCES ?? "github").split(",").map((s) => s.trim());
   const runtime = resolveAgentRuntime(options.runtime ?? process.env.CURATOR_AGENT);
   const instruction = options.instruction ?? process.env.CURATOR_INSTRUCTION;
+  const container = options.container ?? process.env.CURATOR_CONTAINER;
 
   if (!instruction && !options.suppressSuggestions) {
     const { formatSuggestions } = await import("./suggestions.js");
     console.log(`${formatSuggestions(sources)}\n`);
   }
 
-  await runAgentSyncCore({ sources, runtime, instruction, review: options.review });
+  await runAgentSyncCore({ sources, runtime, instruction, container, review: options.review });
 }

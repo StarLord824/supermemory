@@ -241,6 +241,23 @@ describe("runAgentSyncCore", () => {
     expect(getCursor("agent-sync", statePath)).toBe("2026-07-12T12:00:00Z");
   });
 
+  it("threads an explicit container override into the spawned agent's prompt", async () => {
+    freshPaths();
+    const spawnFn = fakeSpawnFn("stored 1 item\nCURSOR=2026-07-12T10:00:00Z");
+
+    await runAgentSyncCore({
+      sources: ["github"],
+      container: "src_github_issues",
+      statePath,
+      mcpConfigPath,
+      curatorCliPath: "/abs/dist/cli.js",
+      spawnFn: spawnFn as unknown as typeof import("node:child_process").spawn,
+    });
+
+    const args = spawnFn.mock.calls[0][1] as string[];
+    expect(args.join(" ")).toContain('containerTag: "src_github_issues"');
+  });
+
   it("spawns the agy runtime when selected", async () => {
     freshPaths();
     const spawnFn = fakeSpawnFn("stored 1 item\nCURSOR=2026-07-12T11:00:00Z");

@@ -35,6 +35,22 @@ describe("buildSyncPrompt", () => {
     expect(buildSyncPrompt("2026-07-01T00:00:00Z", ["github"])).not.toContain("FOCUS");
     expect(buildSyncPrompt("2026-07-01T00:00:00Z", ["github"], "   ")).not.toContain("FOCUS");
   });
+
+  it("defaults the containerTag to the per-source template when no override is given", () => {
+    const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"]);
+    expect(prompt).toContain('containerTag: "src_{source}"');
+  });
+
+  it("uses an explicit container override for every stored memory when provided", () => {
+    const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"], undefined, "src_github_issues");
+    expect(prompt).toContain('containerTag: "src_github_issues"');
+    expect(prompt).not.toContain('containerTag: "src_{source}"');
+  });
+
+  it("ignores a blank container override and falls back to the per-source template", () => {
+    const prompt = buildSyncPrompt("2026-07-01T00:00:00Z", ["github"], undefined, "   ");
+    expect(prompt).toContain('containerTag: "src_{source}"');
+  });
 });
 
 describe("parseCursorFromOutput", () => {

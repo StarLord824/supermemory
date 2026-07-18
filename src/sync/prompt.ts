@@ -4,10 +4,21 @@
  * free-text `instruction` (from `curator sync --instruction` / CURATOR_INSTRUCTION)
  * lets the operator steer what kind of data to pull and prioritize.
  */
-export function buildSyncPrompt(cursor: string, sources: string[], instruction?: string): string {
+export function buildSyncPrompt(
+  cursor: string,
+  sources: string[],
+  instruction?: string,
+  container?: string,
+): string {
   const focus = instruction?.trim()
     ? `\nFOCUS — the operator specifically wants: ${instruction.trim()}\nPrioritize items matching this focus; when it narrows scope, skip items that fall outside it even if they would otherwise qualify.\n`
     : "";
+
+  // Default routes each item to a per-source tag ("src_{source}"), which the
+  // agent substitutes. An explicit override sends EVERY stored memory to one
+  // fixed container instead — used to route e.g. GitHub issues into their own
+  // container separate from PRs (curator sync --container).
+  const containerTag = container?.trim() ? container.trim() : "src_{source}";
 
   return `You are Curator's sync agent. Your job: pull what changed in connected sources and store ONLY durable, useful memories in Supermemory Local.
 ${focus}
@@ -20,7 +31,7 @@ PROTOCOL — follow exactly:
      Supermemory only accepts letters, numbers, hyphens, underscores, and colons in customId —
      NO slashes or "#". If native_id naturally contains those (e.g. "owner/repo#42"), replace
      them with hyphens yourself, e.g. "github:pr:owner-repo-42".
-   - containerTag: "src_{source}"
+   - containerTag: "${containerTag}"
    - content: 1–3 sentence self-contained summary a future agent can use without the original.
 5. Do NOT call forget. Do NOT store secrets, tokens, or emails.
 6. Finish with a report: items scanned, stored (with customIds), skipped and why, and the new cursor value = max updated_at you saw, ISO format, on its own final line as: CURSOR=<iso>.`;
