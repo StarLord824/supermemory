@@ -43,8 +43,13 @@ export function resolveAgentRuntime(value: string | undefined): AgentRuntime {
  *   JSON output is an envelope whose `result` field holds the agent's text —
  *   see extractAgentText.
  * - agy (Antigravity CLI): has NO --mcp-config or --output-format. It takes
- *   `-p <prompt>` (plain-text output) and reads MCP servers from
- *   ~/.gemini/antigravity-cli/mcp_config.json — see writeAgyMcpConfig.
+ *   `-p <prompt>` (plain-text output) and reads MCP servers from its "Global
+ *   Configuration" file, ~/.gemini/config/mcp_config.json — see
+ *   writeAgyMcpConfig. CORRECTED 2026-07-18: an earlier verification pass
+ *   (docs/api-verification.md §11) wrote to ~/.gemini/antigravity-cli/mcp_config.json
+ *   instead, which silently loads zero MCP servers on the currently-installed
+ *   agy 1.1.3 (confirmed via the binary's own embedded docs and a live
+ *   process-spawn test — see docs/api-verification.md §17).
  *   --dangerously-skip-permissions is its only headless tool-approval switch.
  */
 export function buildAgentArgs(
@@ -149,16 +154,24 @@ export function writeMcpConfig(
 }
 
 export function agyMcpConfigPath(): string {
-  return join(homedir(), ".gemini", "antigravity-cli", "mcp_config.json");
+  return join(homedir(), ".gemini", "config", "mcp_config.json");
 }
 
 /**
- * agy has no --mcp-config flag; it reads MCP servers from its own
- * ~/.gemini/antigravity-cli/mcp_config.json (same mcpServers schema —
- * verified on Windows, docs/api-verification.md §11). Merge rather than
- * overwrite: the user's existing servers (including their own coral entry,
- * which may pin an absolute exe path) are preserved; only the `curator`
- * entry is always ours, and `coral` is added only if absent.
+ * agy has no --mcp-config flag; it reads MCP servers from its "Global
+ * Configuration" file, ~/.gemini/config/mcp_config.json (same mcpServers
+ * schema). CORRECTED 2026-07-18: previously written to
+ * ~/.gemini/antigravity-cli/mcp_config.json, which agy 1.1.3 never reads —
+ * confirmed both from the installed binary's own embedded docs (`strings`
+ * output literally names ~/.gemini/config/mcp_config.json as the Global
+ * Configuration path) and by a live test: writing the same content to the
+ * corrected path made agy immediately spawn `coral.exe` and `node` and
+ * correctly report the `remember`/`recall`/`forget`/`get_profile` MCP tools,
+ * where it previously spawned nothing and reported none. See
+ * docs/api-verification.md §17. Merge rather than overwrite: the user's
+ * existing servers (including their own coral entry, which may pin an
+ * absolute exe path) are preserved; only the `curator` entry is always ours,
+ * and `coral` is added only if absent.
  */
 export function writeAgyMcpConfig(
   curatorCliPath: string,
